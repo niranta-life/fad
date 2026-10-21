@@ -1,0 +1,359 @@
+openapi: 3.1.0
+info:
+  title: FAD Slice 2 additions to /v1
+  version: 1.2.0
+  description: The normative standalone contract is openapi.yaml; this overlay is a review-only diff summary.
+paths:
+  /v1/agents/search:
+    post:
+      tags:
+      - TagSearch
+      operationId: searchAgentsByTags
+      summary: Read-only structured tag search
+      description: Requires agents:read. If tags filter supplied, also requires tags:read; restricted tag predicates
+        require tags:restricted:read. AND semantics, exact equality, max 8 predicates. Uses existing Slice 1 Agent
+        schema unchanged. Not a mutation and does not require Idempotency-Key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentTagSearch'
+      responses:
+        '200':
+          description: Agents matching every predicate
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              description: private, no-store
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agents/{agentId}/tags:
+    parameters:
+    - $ref: '#/components/parameters/AgentId'
+    get:
+      tags:
+      - AgentTags
+      operationId: listAgentTags
+      summary: List visible active assignments
+      description: Requires agents:read and tags:read. Restricted tags omitted unless tags:restricted:read. No tombstones.
+        Max 64 assignments per agent; no pagination.
+      responses:
+        '200':
+          description: Readable assignments
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              description: private, no-store
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagAssignmentListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agents/{agentId}/tags/{namespace}/{key}:
+    parameters:
+    - $ref: '#/components/parameters/AgentId'
+    - $ref: '#/components/parameters/TagNamespace'
+    - $ref: '#/components/parameters/TagKey'
+    get:
+      tags:
+      - AgentTags
+      operationId: getAgentTag
+      summary: Read current assignment
+      description: Requires agents:read and tags:read. Restricted tags additionally require tags:restricted:read.
+        Hidden/missing/other-tenant => 404.
+      responses:
+        '200':
+          description: Assignment found
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              description: private, no-store
+              schema:
+                type: string
+            ETag:
+              $ref: '#/components/headers/TagETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagAssignmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    put:
+      tags:
+      - AgentTags
+      operationId: putAgentTag
+      summary: Create or replace an agent tag assignment
+      description: 'Requires tags:write; requires tags:governance for governed/restricted tag. Caller must supply
+        exactly one of If-None-Match:* (no active assignment) or If-Match: strong tag ETag (existing active assignment).
+        Target agent must be active or suspended, not retired.'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/TagIfMatch'
+      - $ref: '#/components/parameters/TagIfNoneMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagAssignmentPut'
+      responses:
+        '200':
+          description: Updated or unchanged assignment
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              description: private, no-store
+              schema:
+                type: string
+            ETag:
+              $ref: '#/components/headers/TagETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagAssignmentResponse'
+        '201':
+          description: Created or recreated assignment
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              description: private, no-store
+              schema:
+                type: string
+            ETag:
+              $ref: '#/components/headers/TagETag'
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagAssignmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    delete:
+      tags:
+      - AgentTags
+      operationId: deleteAgentTag
+      summary: Tombstone an existing assignment
+      description: Requires tags:write, plus tags:governance for governed/restricted tags; If-Match and Idempotency-Key
+        are mandatory. Governed deletion requires X-Change-Reason.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/TagIfMatch'
+      - $ref: '#/components/parameters/ChangeReason'
+      responses:
+        '204':
+          description: Assignment tombstoned; no body
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/tag-definitions:
+    post:
+      tags:
+      - TagDefinitions
+      operationId: createTagDefinition
+      summary: Create immutable typed tag definition
+      description: Requires tags:define; governed or restricted definitions also require tags:governance. Reserved
+        security/compliance/system namespaces must be governed + restricted.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagDefinitionCreate'
+      responses:
+        '201':
+          description: Created tag definition
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              description: private, no-store
+              schema:
+                type: string
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagDefinitionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    get:
+      tags:
+      - TagDefinitions
+      operationId: listTagDefinitions
+      summary: List readable definitions, ordered by namespace and key
+      description: Requires tags:read; restricted definitions require tags:restricted:read. Omit forbidden definitions
+        and any related counts.
+      parameters:
+      - $ref: '#/components/parameters/TagDefinitionNamespaceFilter'
+      - $ref: '#/components/parameters/TagDefinitionLimit'
+      - $ref: '#/components/parameters/TagDefinitionCursor'
+      responses:
+        '200':
+          description: Readable definitions
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              description: private, no-store
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagDefinitionListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/tag-definitions/{namespace}/{key}:
+    parameters:
+    - $ref: '#/components/parameters/TagNamespace'
+    - $ref: '#/components/parameters/TagKey'
+    get:
+      tags:
+      - TagDefinitions
+      operationId: getTagDefinition
+      summary: Read tag definition
+      description: Requires tags:read; restricted definitions also require tags:restricted:read. Hidden and nonexistent
+        both return 404.
+      responses:
+        '200':
+          description: Definition found
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              description: private, no-store
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagDefinitionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'

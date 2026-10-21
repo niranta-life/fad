@@ -1,0 +1,29 @@
+{
+  "slice2_openapi_sha256": "756f2ece6c254b6adf85ba25a5a10232fac93d675c347b66bfaa116a9f83f1d3",
+  "baseline_path_count": 13,
+  "new_path_count": 20,
+  "preserved_paths": [
+    "/health/live",
+    "/health/ready",
+    "/v1/agents",
+    "/v1/agents/search",
+    "/v1/agents/{agentId}",
+    "/v1/agents/{agentId}/activate",
+    "/v1/agents/{agentId}/retire",
+    "/v1/agents/{agentId}/suspend",
+    "/v1/agents/{agentId}/tags",
+    "/v1/agents/{agentId}/tags/{namespace}/{key}",
+    "/v1/organizations/current",
+    "/v1/tag-definitions",
+    "/v1/tag-definitions/{namespace}/{key}"
+  ],
+  "new_paths": [
+    "/v1/agents/{agentId}/capabilities",
+    "/v1/agents/{agentId}/capabilities/{capabilityId}",
+    "/v1/agents/{agentId}/endpoints",
+    "/v1/agents/{agentId}/endpoints/{endpointKey}",
+    "/v1/capabilities",
+    "/v1/capabilities/{capabilityId}/versions/{version}",
+    "/v1/discovery/agents"
+  ]
+}

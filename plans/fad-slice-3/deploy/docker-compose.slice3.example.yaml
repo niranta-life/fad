@@ -1,0 +1,9 @@
+# Illustrative additive overlay ONLY. Requires existing Compose base services
+# named `api` and `postgres`. Do not treat as a standalone app.
+services:
+  api:
+    environment:
+      FAD_SLICE3_ENABLED: ${FAD_SLICE3_ENABLED:-false}
+      FAD_DISCOVERY_CURSOR_HMAC_SECRET: ${FAD_DISCOVERY_CURSOR_HMAC_SECRET:?provide_via_secret_store_in_production}
+      FAD_DISCOVERY_QUERY_TIMEOUT_MS: ${FAD_DISCOVERY_QUERY_TIMEOUT_MS:-1500}
+    # Preserve base image, command, credentials, network and healthcheck.

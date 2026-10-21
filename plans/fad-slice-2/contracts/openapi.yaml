@@ -1,0 +1,1714 @@
+openapi: 3.1.0
+info:
+  title: Federated Agent Directory API — Slices 0–2 (combined)
+  version: 1.2.0
+  description: Complete additive v1 contract. Slice 0 and 1 endpoints and wire behavior are preserved. Slice 2 adds
+    typed tag definitions, agent tag assignments, and structured tag search. All authenticated requests derive tenant
+    identity from the existing X-FAD-API-Key credential.
+servers:
+- url: https://fad.example.internal
+security:
+- ApiKeyAuth: []
+tags:
+- name: Health
+- name: Organizations
+- name: Agents
+- name: TagDefinitions
+- name: AgentTags
+- name: TagSearch
+paths:
+  /health/live:
+    get:
+      tags:
+      - Health
+      operationId: getLiveness
+      summary: Process liveness (not database readiness)
+      security: []
+      responses:
+        '200':
+          description: Process is responsive
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Liveness'
+              example:
+                status: ok
+        '503':
+          $ref: '#/components/responses/HealthUnavailable'
+  /health/ready:
+    get:
+      tags:
+      - Health
+      operationId: getReadiness
+      summary: Ready to serve authenticated requests
+      description: 'Requires database reachability and a compatible applied schema version.
+
+        Returns no hostnames, credential details, SQL errors or internals.
+
+        '
+      security: []
+      responses:
+        '200':
+          description: Ready
+          headers:
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+              example:
+                status: ready
+        '503':
+          $ref: '#/components/responses/HealthUnavailable'
+  /v1/agents:
+    post:
+      tags:
+      - Agents
+      operationId: registerAgent
+      summary: Register an agent
+      description: Requires agents:write. Idempotency-Key is mandatory.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentCreate'
+      responses:
+        '201':
+          description: Agent registered
+          headers:
+            Location:
+              description: Relative resource URI
+              schema:
+                type: string
+            ETag:
+              $ref: '#/components/headers/ETag'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    get:
+      tags:
+      - Agents
+      operationId: listAgents
+      summary: List agents in authenticated organization
+      description: Requires agents:read. Ordered by created_at DESC, id DESC.
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/AgentStatus'
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 25
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 4096
+      responses:
+        '200':
+          description: Page of agents
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agents/search:
+    post:
+      tags:
+      - TagSearch
+      operationId: searchAgentsByTags
+      summary: Read-only structured tag search
+      description: Requires agents:read. If tags filter supplied, also requires tags:read; restricted tag predicates
+        require tags:restricted:read. AND semantics, exact equality, max 8 predicates. Uses existing Slice 1 Agent
+        schema unchanged. Not a mutation and does not require Idempotency-Key.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentTagSearch'
+      responses:
+        '200':
+          description: Agents matching every predicate
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              description: private, no-store
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agents/{agentId}:
+    parameters:
+    - $ref: '#/components/parameters/AgentId'
+    get:
+      tags:
+      - Agents
+      operationId: getAgent
+      summary: Get an agent
+      description: Requires agents:read. Unknown and cross-tenant IDs both return 404.
+      responses:
+        '200':
+          description: Agent found
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    patch:
+      tags:
+      - Agents
+      operationId: updateAgent
+      summary: Partially update agent metadata
+      description: 'Requires agents:write, Idempotency-Key, and a strong If-Match value.
+
+        application/json is a partial-update document, not JSON Merge Patch.
+
+        Only explicitly supplied fields change. description:null clears it.
+
+        status is immutable through this endpoint. Retired agents cannot be edited.
+
+        '
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentUpdate'
+      responses:
+        '200':
+          description: Updated (no-op updates retain revision)
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agents/{agentId}/activate:
+    parameters:
+    - $ref: '#/components/parameters/AgentId'
+    post:
+      tags:
+      - Agents
+      operationId: activateAgent
+      summary: Activate a suspended agent
+      description: Requires agents:lifecycle. Active to active is a no-op; retired is terminal.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LifecycleRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/AgentChanged'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agents/{agentId}/retire:
+    parameters:
+    - $ref: '#/components/parameters/AgentId'
+    post:
+      tags:
+      - Agents
+      operationId: retireAgent
+      summary: Retire an agent permanently
+      description: Requires agents:lifecycle. Retired to retired is a no-op; no reactivation.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LifecycleRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/AgentChanged'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agents/{agentId}/suspend:
+    parameters:
+    - $ref: '#/components/parameters/AgentId'
+    post:
+      tags:
+      - Agents
+      operationId: suspendAgent
+      summary: Suspend an agent
+      description: Requires agents:lifecycle. Suspended to suspended is a no-op.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LifecycleRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/AgentChanged'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agents/{agentId}/tags:
+    parameters:
+    - $ref: '#/components/parameters/AgentId'
+    get:
+      tags:
+      - AgentTags
+      operationId: listAgentTags
+      summary: List visible active assignments
+      description: Requires agents:read and tags:read. Restricted tags omitted unless tags:restricted:read. No tombstones.
+        Max 64 assignments per agent; no pagination.
+      responses:
+        '200':
+          description: Readable assignments
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              description: private, no-store
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagAssignmentListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/agents/{agentId}/tags/{namespace}/{key}:
+    parameters:
+    - $ref: '#/components/parameters/AgentId'
+    - $ref: '#/components/parameters/TagNamespace'
+    - $ref: '#/components/parameters/TagKey'
+    get:
+      tags:
+      - AgentTags
+      operationId: getAgentTag
+      summary: Read current assignment
+      description: Requires agents:read and tags:read. Restricted tags additionally require tags:restricted:read.
+        Hidden/missing/other-tenant => 404.
+      responses:
+        '200':
+          description: Assignment found
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              description: private, no-store
+              schema:
+                type: string
+            ETag:
+              $ref: '#/components/headers/TagETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagAssignmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    put:
+      tags:
+      - AgentTags
+      operationId: putAgentTag
+      summary: Create or replace an agent tag assignment
+      description: 'Requires tags:write; requires tags:governance for governed/restricted tag. Caller must supply
+        exactly one of If-None-Match:* (no active assignment) or If-Match: strong tag ETag (existing active assignment).
+        Target agent must be active or suspended, not retired.'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/TagIfMatch'
+      - $ref: '#/components/parameters/TagIfNoneMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagAssignmentPut'
+      responses:
+        '200':
+          description: Updated or unchanged assignment
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              description: private, no-store
+              schema:
+                type: string
+            ETag:
+              $ref: '#/components/headers/TagETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagAssignmentResponse'
+        '201':
+          description: Created or recreated assignment
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              description: private, no-store
+              schema:
+                type: string
+            ETag:
+              $ref: '#/components/headers/TagETag'
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagAssignmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    delete:
+      tags:
+      - AgentTags
+      operationId: deleteAgentTag
+      summary: Tombstone an existing assignment
+      description: Requires tags:write, plus tags:governance for governed/restricted tags; If-Match and Idempotency-Key
+        are mandatory. Governed deletion requires X-Change-Reason.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - name: If-Match
+        in: header
+        required: true
+        description: Exact strong ETag for active tag assignment.
+        schema:
+          type: string
+          pattern: ^"tag-v[1-9][0-9]*"$
+      - $ref: '#/components/parameters/ChangeReason'
+      responses:
+        '204':
+          description: Assignment tombstoned; no body
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '412':
+          $ref: '#/components/responses/PreconditionFailed'
+        '428':
+          $ref: '#/components/responses/PreconditionRequired'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /v1/organizations/current:
+    get:
+      tags:
+      - Organizations
+      operationId: getCurrentOrganization
+      summary: Return organization bound to caller's verified API key
+      description: 'Requires organizations:read. The caller cannot select an organization
+
+        using a header, query parameter, or body. Unknown query parameters
+
+        return 400 VALIDATION_ERROR.
+
+        '
+      responses:
+        '200':
+          description: Organization for authenticated credential
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/FoundationRequestId'
+            Cache-Control:
+              $ref: '#/components/headers/PrivateNoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationResponse'
+              example:
+                data:
+                  id: b4fbb090-335b-4c59-bc0e-5b382ee986b5
+                  name: Example Finance
+                  status: active
+                  created_at: '2026-10-20T12:00:00.000Z'
+                meta:
+                  request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda
+                  api_version: v1
+        '400':
+          $ref: '#/components/responses/FoundationBadRequest'
+        '401':
+          $ref: '#/components/responses/FoundationUnauthorized'
+        '403':
+          $ref: '#/components/responses/FoundationForbidden'
+        '429':
+          $ref: '#/components/responses/FoundationRateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /v1/tag-definitions:
+    post:
+      tags:
+      - TagDefinitions
+      operationId: createTagDefinition
+      summary: Create immutable typed tag definition
+      description: Requires tags:define; governed or restricted definitions also require tags:governance. Reserved
+        security/compliance/system namespaces must be governed + restricted.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagDefinitionCreate'
+      responses:
+        '201':
+          description: Created tag definition
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              description: private, no-store
+              schema:
+                type: string
+            Location:
+              $ref: '#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagDefinitionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    get:
+      tags:
+      - TagDefinitions
+      operationId: listTagDefinitions
+      summary: List readable definitions, ordered by namespace and key
+      description: Requires tags:read; restricted definitions require tags:restricted:read. Omit forbidden definitions
+        and any related counts.
+      parameters:
+      - $ref: '#/components/parameters/TagDefinitionNamespaceFilter'
+      - $ref: '#/components/parameters/TagDefinitionLimit'
+      - $ref: '#/components/parameters/TagDefinitionCursor'
+      responses:
+        '200':
+          description: Readable definitions
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              description: private, no-store
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagDefinitionListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/tag-definitions/{namespace}/{key}:
+    parameters:
+    - $ref: '#/components/parameters/TagNamespace'
+    - $ref: '#/components/parameters/TagKey'
+    get:
+      tags:
+      - TagDefinitions
+      operationId: getTagDefinition
+      summary: Read tag definition
+      description: Requires tags:read; restricted definitions also require tags:restricted:read. Hidden and nonexistent
+        both return 404.
+      responses:
+        '200':
+          description: Definition found
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+            Cache-Control:
+              description: private, no-store
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TagDefinitionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-FAD-API-Key
+      description: Credential issued by Slice 0; authenticated identity resolves organization and scopes.
+    FadApiKey:
+      type: apiKey
+      in: header
+      name: X-FAD-API-Key
+      description: 'Opaque organization-scoped machine credential. Never put keys in URLs,
+
+        request bodies, logs, telemetry, examples, or client-side applications.
+
+        '
+  parameters:
+    AgentId:
+      name: agentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+        pattern: ^[A-Za-z0-9._:-]+$
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Exact strong ETag returned by GET, such as '"agent-v2"'; wildcard is not accepted.
+      schema:
+        type: string
+        pattern: ^"agent-v[1-9][0-9]*"$
+    TagNamespace:
+      name: namespace
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^[a-z][a-z0-9_-]{0,39}$
+        maxLength: 40
+    TagKey:
+      name: key
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^[a-z][a-z0-9_-]{0,39}$
+        maxLength: 40
+    TagIfMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: Required for update/delete of existing active assignment. Exact strong ETag such as "tag-v2";
+        weak, wildcard and lists are rejected.
+      schema:
+        type: string
+        pattern: ^"tag-v[1-9][0-9]*"$
+    TagIfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      description: Required on PUT if no current assignment; must be exactly *. Mutually exclusive with If-Match.
+      schema:
+        type: string
+        enum:
+        - '*'
+    ChangeReason:
+      name: X-Change-Reason
+      in: header
+      required: false
+      description: Required on governed tag deletion; UTF-8 printable text, 1–500 characters.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 500
+    TagDefinitionCursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 4096
+    TagDefinitionLimit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 25
+    TagDefinitionNamespaceFilter:
+      name: namespace
+      in: query
+      required: false
+      schema:
+        type: string
+        pattern: ^[a-z][a-z0-9_-]{0,39}$
+  headers:
+    ETag:
+      description: Strong ETag for this agent representation.
+      schema:
+        type: string
+        pattern: ^"agent-v[1-9][0-9]*"$
+    RequestId:
+      description: Request correlation identifier for this HTTP attempt.
+      schema:
+        type: string
+    FoundationRequestId:
+      description: Unique server-generated request correlation UUID.
+      schema:
+        type: string
+        format: uuid
+    PrivateNoStore:
+      description: For protected responses, always private and no-store.
+      schema:
+        type: string
+        const: private, no-store
+    NoStore:
+      description: Health response caching is prohibited.
+      schema:
+        type: string
+        const: no-store
+    RetryAfter:
+      description: Whole number of seconds to wait before retry.
+      schema:
+        type: integer
+        minimum: 1
+    TagETag:
+      description: Strong revision ETag for the individual tag assignment. Does not change the parent Agent ETag.
+      schema:
+        type: string
+        pattern: ^"tag-v[1-9][0-9]*"$
+    Location:
+      description: Location of created resource
+      schema:
+        type: string
+  schemas:
+    AgentStatus:
+      type: string
+      enum:
+      - active
+      - suspended
+      - retired
+    Agent:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - global_id
+      - organization_id
+      - name
+      - description
+      - owner_principal_id
+      - status
+      - revision
+      - created_at
+      - updated_at
+      - created_by
+      - updated_by
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        global_id:
+          type: string
+          readOnly: true
+          description: urn:fad:agent:<organization_uuid>:<agent_uuid>
+        organization_id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        description:
+          type: string
+          maxLength: 2000
+        owner_principal_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/AgentStatus'
+        revision:
+          type: integer
+          minimum: 1
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+          format: uuid
+        updated_by:
+          type: string
+          format: uuid
+    AgentCreate:
+      type: object
+      additionalProperties: false
+      required:
+      - name
+      - owner_principal_id
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        description:
+          type: string
+          minLength: 0
+          maxLength: 2000
+          default: ''
+        owner_principal_id:
+          type: string
+          format: uuid
+    AgentUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        description:
+          type:
+          - string
+          - 'null'
+          maxLength: 2000
+        owner_principal_id:
+          type: string
+          format: uuid
+    LifecycleRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+    ResponseMeta:
+      type: object
+      additionalProperties: false
+      required:
+      - request_id
+      - api_version
+      properties:
+        request_id:
+          type: string
+        api_version:
+          type: string
+          const: v1
+    PageMeta:
+      type: object
+      additionalProperties: false
+      required:
+      - request_id
+      - api_version
+      - limit
+      - next_cursor
+      properties:
+        request_id:
+          type: string
+        api_version:
+          type: string
+          const: v1
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        next_cursor:
+          type:
+          - string
+          - 'null'
+    AgentResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - data
+      - meta
+      properties:
+        data:
+          $ref: '#/components/schemas/Agent'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    AgentListResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - data
+      - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Agent'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+    FieldError:
+      type: object
+      required:
+      - field
+      - issue
+      properties:
+        field:
+          type: string
+        issue:
+          type: string
+    ApiError:
+      type: object
+      additionalProperties: false
+      required:
+      - error
+      - meta
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+          - code
+          - message
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                $ref: '#/components/schemas/FieldError'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    Liveness:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          const: ok
+    Readiness:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          enum:
+          - ready
+          - not_ready
+    Organization:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - name
+      - status
+      - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        status:
+          type: string
+          enum:
+          - active
+          - suspended
+        created_at:
+          type: string
+          format: date-time
+    FoundationResponseMeta:
+      type: object
+      additionalProperties: true
+      required:
+      - request_id
+      - api_version
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        api_version:
+          type: string
+          const: v1
+    OrganizationResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - data
+      - meta
+      properties:
+        data:
+          $ref: '#/components/schemas/Organization'
+        meta:
+          $ref: '#/components/schemas/FoundationResponseMeta'
+    ErrorData:
+      type: object
+      additionalProperties: true
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: string
+          pattern: ^[A-Z][A-Z0-9_]*$
+          examples:
+          - VALIDATION_ERROR
+          - UNAUTHORIZED
+          - FORBIDDEN
+          - RATE_LIMITED
+          - DEPENDENCY_UNAVAILABLE
+          - INTERNAL_ERROR
+        message:
+          type: string
+          minLength: 1
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - error
+      - meta
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorData'
+        meta:
+          $ref: '#/components/schemas/FoundationResponseMeta'
+    HealthUnavailable:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      properties:
+        status:
+          type: string
+          const: not_ready
+    TagType:
+      type: string
+      enum:
+      - string
+      - integer
+      - boolean
+      - enum
+    TagVisibility:
+      type: string
+      enum:
+      - internal
+      - restricted
+    TagScalar:
+      oneOf:
+      - type: string
+        minLength: 1
+        maxLength: 128
+      - type: integer
+        minimum: -1000000000
+        maximum: 1000000000
+      - type: boolean
+      description: Actual type must match the immutable tag definition. String values must be NFC-normalized, nonempty
+        and free of control characters.
+    TagDefinitionCreate:
+      type: object
+      additionalProperties: false
+      required:
+      - namespace
+      - key
+      - value_type
+      - governed
+      - visibility
+      properties:
+        namespace:
+          type: string
+          pattern: ^[a-z][a-z0-9_-]{0,39}$
+          maxLength: 40
+        key:
+          type: string
+          pattern: ^[a-z][a-z0-9_-]{0,39}$
+          maxLength: 40
+        value_type:
+          $ref: '#/components/schemas/TagType'
+        enum_values:
+          type: array
+          uniqueItems: true
+          minItems: 2
+          maxItems: 32
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        governed:
+          type: boolean
+        visibility:
+          $ref: '#/components/schemas/TagVisibility'
+        description:
+          type: string
+          maxLength: 500
+          default: ''
+    TagDefinition:
+      type: object
+      additionalProperties: false
+      required:
+      - organization_id
+      - namespace
+      - key
+      - value_type
+      - enum_values
+      - governed
+      - visibility
+      - description
+      - created_by
+      - created_at
+      properties:
+        organization_id:
+          type: string
+          format: uuid
+          readOnly: true
+        namespace:
+          type: string
+          pattern: ^[a-z][a-z0-9_-]{0,39}$
+        key:
+          type: string
+          pattern: ^[a-z][a-z0-9_-]{0,39}$
+        value_type:
+          $ref: '#/components/schemas/TagType'
+        enum_values:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        governed:
+          type: boolean
+        visibility:
+          $ref: '#/components/schemas/TagVisibility'
+        description:
+          type: string
+        created_by:
+          type: string
+          format: uuid
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+    TagAssignmentPut:
+      type: object
+      additionalProperties: false
+      required:
+      - value
+      properties:
+        value:
+          $ref: '#/components/schemas/TagScalar'
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: Mandatory when tag definition is governed.
+    TagAssignment:
+      type: object
+      additionalProperties: false
+      required:
+      - agent_id
+      - namespace
+      - key
+      - value
+      - revision
+      - governed
+      - visibility
+      - created_by
+      - updated_by
+      - created_at
+      - updated_at
+      properties:
+        agent_id:
+          type: string
+          format: uuid
+          readOnly: true
+        namespace:
+          type: string
+          readOnly: true
+        key:
+          type: string
+          readOnly: true
+        value:
+          $ref: '#/components/schemas/TagScalar'
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+          readOnly: true
+        governed:
+          type: boolean
+          readOnly: true
+        visibility:
+          $ref: '#/components/schemas/TagVisibility'
+        created_by:
+          type: string
+          format: uuid
+          readOnly: true
+        updated_by:
+          type: string
+          format: uuid
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    TagPredicate:
+      type: object
+      additionalProperties: false
+      required:
+      - namespace
+      - key
+      - operator
+      - value
+      properties:
+        namespace:
+          type: string
+          pattern: ^[a-z][a-z0-9_-]{0,39}$
+        key:
+          type: string
+          pattern: ^[a-z][a-z0-9_-]{0,39}$
+        operator:
+          type: string
+          const: eq
+        value:
+          $ref: '#/components/schemas/TagScalar'
+    AgentTagSearch:
+      type: object
+      additionalProperties: false
+      properties:
+        tags:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/TagPredicate'
+          description: All predicates are AND; repeated identical keys are rejected.
+        status:
+          $ref: '#/components/schemas/AgentStatus'
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 25
+        cursor:
+          type: string
+          minLength: 1
+          maxLength: 4096
+      minProperties: 1
+    TagDefinitionResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - data
+      - meta
+      properties:
+        data:
+          $ref: '#/components/schemas/TagDefinition'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    TagDefinitionListResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - data
+      - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TagDefinition'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+    TagAssignmentResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - data
+      - meta
+      properties:
+        data:
+          $ref: '#/components/schemas/TagAssignment'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+    TagAssignmentListResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - data
+      - meta
+      properties:
+        data:
+          type: array
+          maxItems: 64
+          items:
+            $ref: '#/components/schemas/TagAssignment'
+        meta:
+          $ref: '#/components/schemas/ResponseMeta'
+  responses:
+    AgentChanged:
+      description: Agent state after transition (no-op transitions retain revision)
+      headers:
+        ETag:
+          $ref: '#/components/headers/ETag'
+        X-Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AgentResponse'
+    BadRequest:
+      description: Invalid syntax, cursor, idempotency key, or request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Unauthorized:
+      description: Missing or invalid credentials
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Forbidden:
+      description: Principal lacks the required permission
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    NotFound:
+      description: Agent does not exist in the authenticated organization
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Conflict:
+      description: Invalid state transition, or conflicting idempotency request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    PreconditionFailed:
+      description: If-Match did not match current resource revision
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    PreconditionRequired:
+      description: If-Match is required for mutation of an existing agent
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Unprocessable:
+      description: Well-formed body does not satisfy schema or business validation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    PayloadTooLarge:
+      description: Body exceeds configured size limit
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    UnsupportedMediaType:
+      description: Unsupported body content type
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    RateLimited:
+      description: Tenant/principal rate limit exceeded
+      headers:
+        Retry-After:
+          description: Seconds to wait
+          schema:
+            type: integer
+            minimum: 1
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    Unavailable:
+      description: Required service dependency is unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+    HealthUnavailable:
+      description: Process is not ready to serve traffic
+      headers:
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/HealthUnavailable'
+          example:
+            status: not_ready
+    FoundationBadRequest:
+      description: Malformed request or unknown query parameters
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/FoundationRequestId'
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: Invalid request.
+            meta:
+              request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda
+              api_version: v1
+    FoundationUnauthorized:
+      description: Missing, unknown, invalid, expired, or revoked credential; inactive principal or organization
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/FoundationRequestId'
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: Invalid or missing API credential.
+            meta:
+              request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda
+              api_version: v1
+    FoundationForbidden:
+      description: Authenticated principal lacks required action scope
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/FoundationRequestId'
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: FORBIDDEN
+              message: Insufficient permission.
+            meta:
+              request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda
+              api_version: v1
+    FoundationRateLimited:
+      description: Caller exceeds request quota
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/FoundationRequestId'
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: RATE_LIMITED
+              message: Request limit exceeded.
+            meta:
+              request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda
+              api_version: v1
+    InternalError:
+      description: Unexpected application failure (internal details redacted)
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/FoundationRequestId'
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: INTERNAL_ERROR
+              message: Internal server error.
+            meta:
+              request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda
+              api_version: v1
+    DependencyUnavailable:
+      description: Required database or other critical dependency unavailable
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/FoundationRequestId'
+        Cache-Control:
+          $ref: '#/components/headers/PrivateNoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: DEPENDENCY_UNAVAILABLE
+              message: Service temporarily unavailable.
+            meta:
+              request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda
+              api_version: v1
