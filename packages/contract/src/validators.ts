@@ -30,12 +30,19 @@ export interface OpenApiDocument {
 }
 
 const STRIP = new Set(['example', 'examples', 'description', 'summary', 'xml', 'discriminator']);
+const KEY_MAPS = new Set(['properties', 'patternProperties', '$defs', 'definitions']);
 
 function strip(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(strip);
   if (value !== null && typeof value === 'object') {
     const out: Record<string, unknown> = {};
     for (const [key, inner] of Object.entries(value)) {
+      if (KEY_MAPS.has(key) && inner !== null && typeof inner === 'object' && !Array.isArray(inner)) {
+        const map: Record<string, unknown> = {};
+        for (const [name, schema] of Object.entries(inner)) map[name] = strip(schema);
+        out[key] = map;
+        continue;
+      }
       if (!STRIP.has(key)) out[key] = strip(inner);
     }
     return out;

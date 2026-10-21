@@ -1,0 +1,29 @@
+replica_port: 18091
+request: POST /v1/agents
+status: 201
+etag: "agent-v1"
+cache-control: private, no-store
+location: /v1/agents/3adface0-9fd9-4ef4-9da7-3e297b56089b
+data.id: 3adface0-9fd9-4ef4-9da7-3e297b56089b
+data.organization_id: 984a80ae-85b6-4b6f-8491-5d7a694d6de3
+data.global_id: urn:fad:agent:984a80ae-85b6-4b6f-8491-5d7a694d6de3:3adface0-9fd9-4ef4-9da7-3e297b56089b
+global_id_matches: true
+
+request: GET /v1/agents/3adface0-9fd9-4ef4-9da7-3e297b56089b
+status: 200
+etag: "agent-v1"
+cache-control: private, no-store
+location: 
+data.id: 3adface0-9fd9-4ef4-9da7-3e297b56089b
+data.organization_id: 984a80ae-85b6-4b6f-8491-5d7a694d6de3
+data.global_id: urn:fad:agent:984a80ae-85b6-4b6f-8491-5d7a694d6de3:3adface0-9fd9-4ef4-9da7-3e297b56089b
+global_id_matches: true
+
+SERVER
+{"level":30,"time":1792552851409,"pid":7,"hostname":"b4fe06e6cb3e","msg":"Server listening at http://127.0.0.1:8080"}
+{"level":30,"time":1792552851409,"pid":7,"hostname":"b4fe06e6cb3e","msg":"Server listening at http://172.29.0.3:8080"}
+{"level":30,"time":1792552851409,"pid":7,"hostname":"b4fe06e6cb3e","port":8080,"bind":"0.0.0.0","msg":"listening"}
+{"level":30,"time":1792552851489,"pid":7,"hostname":"b4fe06e6cb3e","reqId":"8ca8f5cc-ec95-409d-9187-c94e0c253274","request_id":"8ca8f5cc-ec95-409d-9187-c94e0c253274","status":200,"method":"GET","path":"/health/ready","msg":"request"}
+{"level":30,"time":1792552851981,"pid":7,"hostname":"b4fe06e6cb3e","reqId":"5d7a986e-375f-4ecc-8556-c228b3267c40","request_id":"5d7a986e-375f-4ecc-8556-c228b3267c40","status":201,"method":"POST","path":"/v1/agents","msg":"request"}
+{"level":30,"time":1792552851985,"pid":7,"hostname":"b4fe06e6cb3e","reqId":"9c37cafa-c8b3-4f9f-9cd5-e918c0add2a0","request_id":"9c37cafa-c8b3-4f9f-9cd5-e918c0add2a0","status":200,"method":"GET","path":"/v1/agents/3adface0-9fd9-4ef4-9da7-3e297b56089b","msg":"request"}
+

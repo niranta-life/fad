@@ -10,6 +10,12 @@ export const ERRORS = {
   METHOD_NOT_ALLOWED: 'Method not allowed.',
   NOT_FOUND: 'Resource not found.',
   PAYLOAD_TOO_LARGE: 'Request body is too large.',
+  AGENT_NOT_FOUND: 'Agent not found.',
+  INVALID_STATE_TRANSITION: 'The agent status does not allow this change.',
+  IDEMPOTENCY_CONFLICT: 'Idempotency key was reused with a different request.',
+  PRECONDITION_FAILED: 'The agent has changed. Fetch its current representation and retry.',
+  PRECONDITION_REQUIRED: 'If-Match is required.',
+  UNSUPPORTED_MEDIA_TYPE: 'Content-Type must be application/json.',
 } as const;
 
 export type ErrorCode = keyof typeof ERRORS;

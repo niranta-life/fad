@@ -10,6 +10,7 @@ export interface AuditInput {
   targetId: string;
   outcome: 'success' | 'denied' | 'failed';
   details: Record<string, unknown>;
+  requestId?: string | null;
 }
 
 export async function insertAudit(client: PoolClient, input: AuditInput): Promise<void> {
@@ -17,7 +18,7 @@ export async function insertAudit(client: PoolClient, input: AuditInput): Promis
   await client.query(
     `INSERT INTO audit_events (
        organization_id, id, actor_principal_id, action, target_type, target_id, outcome, request_id, details
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8::jsonb)`,
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
     [
       input.organizationId,
       randomUUID(),
@@ -26,6 +27,7 @@ export async function insertAudit(client: PoolClient, input: AuditInput): Promis
       input.targetType,
       input.targetId,
       input.outcome,
+      input.requestId ?? null,
       JSON.stringify(details),
     ],
   );

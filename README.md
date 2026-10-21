@@ -1,6 +1,6 @@
 # Federated Agent Directory
 
-The Federated Agent Directory (FAD) is the control service for a future directory of enterprise agents. This repository contains Slice 0. Slice 0 is the first release. Slice 0 is the secure foundation for later releases.
+The Federated Agent Directory (FAD) is the control service for a future directory of enterprise agents. This repository contains Slice 0 and Slice 1. Slice 0 is the secure foundation. Slice 1 registers and manages agents.
 
 ## Contents of Slice 0
 
@@ -23,6 +23,10 @@ The OpenAPI description is `contracts/openapi.yaml`.
 ## Limits of Slice 0
 
 Slice 0 does not register agents. Slice 0 does not serve tags, policies, discovery, or delegation. Slice 0 does not serve federation, MCP, or OAuth. Slice 0 does not call an agent. Slice 0 has no user interface. Slice 0 has no public user registration.
+
+## Agent registration
+
+Slice 1 uses the same API, the same API key, and the same database. A key with `agents:write` can register an agent. The organization can get, list, and update that agent. A key with `agents:lifecycle` can suspend, activate, or retire it. Another organization receives status 404. Retired agents stay readable. They cannot be activated or edited. `@fad/sdk` 0.2.0 calls these routes. Slice 1 does not add tags, discovery, policy, delegation, federation, or MCP.
 
 ## Security rules
 

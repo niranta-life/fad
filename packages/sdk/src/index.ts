@@ -1,6 +1,8 @@
 export interface FadClientOptions {
   baseUrl: string;
-  apiKey: string | (() => Promise<string> | string);
+  apiKey?: string | (() => Promise<string> | string);
+  /** Same role as apiKey. Use one of them. apiKey wins when both are set. */
+  credentialProvider?: () => Promise<string> | string;
   timeoutMs?: number;
   fetch?: typeof globalThis.fetch;
   maxGetRetries?: number;
@@ -26,6 +28,63 @@ export interface Organization {
 export interface FadResponse<T> {
   data: T;
   meta: { request_id: string; api_version: 'v1'; [key: string]: unknown };
+}
+
+export type AgentStatus = 'active' | 'suspended' | 'retired';
+
+export interface Agent {
+  id: string;
+  global_id: string;
+  organization_id: string;
+  name: string;
+  description: string;
+  owner_principal_id: string;
+  status: AgentStatus;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string;
+  updated_by: string;
+}
+
+export interface AgentCreate {
+  name: string;
+  description?: string;
+  owner_principal_id: string;
+}
+
+export interface AgentUpdate {
+  name?: string;
+  description?: string | null;
+  owner_principal_id?: string;
+}
+
+export interface LifecycleRequest {
+  reason: string;
+}
+
+export interface AgentResult extends FadResponse<Agent> {
+  etag: string;
+  location?: string;
+}
+
+export interface AgentPage {
+  data: Agent[];
+  meta: { request_id: string; api_version: 'v1'; limit: number; next_cursor: string | null };
+}
+
+export interface AgentListQuery {
+  status?: AgentStatus;
+  limit?: number;
+  cursor?: string;
+}
+
+interface IdempotentOptions extends CallOptions {
+  idempotencyKey: string;
+}
+
+interface PreconditionOptions extends IdempotentOptions {
+  ifMatch: string;
 }
 
 export class FadApiError extends Error {
@@ -142,7 +201,7 @@ function retryWaitMs(input: {
 
 export class FadClient {
   private readonly baseUrl: URL;
-  private readonly apiKey: FadClientOptions['apiKey'];
+  private readonly apiKey: string | (() => Promise<string> | string);
   private readonly timeoutMs: number;
   private readonly fetchImpl: typeof globalThis.fetch;
   private readonly maxGetRetries: number;
@@ -154,7 +213,9 @@ export class FadClient {
 
   constructor(options: FadClientOptions) {
     this.baseUrl = assertBaseUrl(options.baseUrl, options.allowInsecureHttp === true);
-    this.apiKey = options.apiKey;
+    const provider = options.apiKey ?? options.credentialProvider;
+    if (provider === undefined) throw new Error('apiKey is empty');
+    this.apiKey = provider;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     if (!Number.isFinite(this.timeoutMs) || this.timeoutMs <= 0 || this.timeoutMs > 120_000) {
       throw new Error('timeoutMs is out of range');
@@ -166,7 +227,7 @@ export class FadClient {
     }
     this.maxRetryAfterMs = options.maxRetryAfterMs ?? DEFAULT_RETRY_AFTER_CAP_MS;
     const suffix = options.userAgentSuffix ? ` ${options.userAgentSuffix}` : '';
-    this.userAgent = `@fad/sdk/0.1.0${suffix}`;
+    this.userAgent = `@fad/sdk/0.2.0${suffix}`;
     this.now = options.now ?? Date.now;
     this.random = options.random ?? Math.random;
     this.sleep = options.sleep ?? delay;
@@ -180,6 +241,23 @@ export class FadClient {
 
   readonly organizations = {
     current: (options?: CallOptions): Promise<FadResponse<Organization>> => this.currentOrganization(options),
+  };
+
+  readonly agents = {
+    register: (body: AgentCreate, options: IdempotentOptions): Promise<AgentResult> =>
+      this.agentWrite('/v1/agents', 'POST', body, options, false),
+    get: (agentId: string, options?: CallOptions): Promise<AgentResult> =>
+      this.agentRead(`/v1/agents/${encodeURIComponent(agentId)}`, options),
+    list: (query: AgentListQuery = {}, options?: CallOptions): Promise<AgentPage> => this.agentList(query, options),
+    update: (agentId: string, body: AgentUpdate, options: PreconditionOptions): Promise<AgentResult> =>
+      this.agentWrite(`/v1/agents/${encodeURIComponent(agentId)}`, 'PATCH', body, options, true),
+    suspend: (agentId: string, body: LifecycleRequest, options: PreconditionOptions): Promise<AgentResult> =>
+      this.agentWrite(`/v1/agents/${encodeURIComponent(agentId)}/suspend`, 'POST', body, options, true),
+    activate: (agentId: string, body: LifecycleRequest, options: PreconditionOptions): Promise<AgentResult> =>
+      this.agentWrite(`/v1/agents/${encodeURIComponent(agentId)}/activate`, 'POST', body, options, true),
+    retire: (agentId: string, body: LifecycleRequest, options: PreconditionOptions): Promise<AgentResult> =>
+      this.agentWrite(`/v1/agents/${encodeURIComponent(agentId)}/retire`, 'POST', body, options, true),
+    iterate: (query: AgentListQuery = {}, options?: CallOptions): AsyncGenerator<Agent> => this.iterateAgents(query, options),
   };
 
   private async healthCall<T extends { status: string }>(
@@ -237,6 +315,21 @@ export class FadClient {
           redirect.name = 'FadRedirectError';
           throw redirect;
         }
+        const remaining = this.timeoutMs - (this.now() - started);
+        if (attempt < this.maxGetRetries && remaining > 0) {
+          const wait = retryWaitMs({
+            attempt: attempt + 1,
+            retryAfterHeader: null,
+            maxRetryAfterMs: this.maxRetryAfterMs,
+            remainingMs: remaining,
+            random: this.random,
+          });
+          if (!(wait >= remaining && wait > 0)) {
+            attempt += 1;
+            await this.sleep(wait, combined);
+            if (this.now() - started < this.timeoutMs) continue;
+          }
+        }
         const wrapped = new Error('Network request failed');
         wrapped.name = 'FadNetworkError';
         throw wrapped;
@@ -259,6 +352,149 @@ export class FadClient {
         continue;
       }
       return response;
+    }
+  }
+
+  private async sendJson(
+    path: string,
+    method: 'POST' | 'PATCH',
+    body: unknown,
+    extraHeaders: Record<string, string>,
+    signal: AbortSignal | undefined,
+    key: string,
+  ): Promise<Response> {
+    const started = this.now();
+    const timeout = AbortSignal.timeout(this.timeoutMs);
+    const combined = AbortSignal.any(signal ? [timeout, signal] : [timeout]);
+    const url = new URL(path, this.baseUrl);
+    const payload = JSON.stringify(body);
+    let attempt = 0;
+    while (true) {
+      if (combined.aborted) {
+        throw abortError(combined.reason instanceof Error ? combined.reason.name : 'AbortError');
+      }
+      const headers = new Headers({
+        accept: 'application/json',
+        'content-type': 'application/json',
+        'user-agent': this.userAgent,
+      });
+      headers.set('X-FAD-API-Key', key);
+      for (const [name, value] of Object.entries(extraHeaders)) headers.set(name, value);
+      let response: Response;
+      try {
+        response = await this.fetchImpl(url, { method, headers, body: payload, redirect: 'error', signal: combined });
+      } catch (error) {
+        if (isAbort(error)) throw abortError(error instanceof Error ? error.name : 'AbortError');
+        if (isRedirect(error)) {
+          const redirect = new Error('Redirects are not followed.');
+          redirect.name = 'FadRedirectError';
+          throw redirect;
+        }
+        const remaining = this.timeoutMs - (this.now() - started);
+        if (attempt < this.maxGetRetries && remaining > 0) {
+          const wait = retryWaitMs({
+            attempt: attempt + 1,
+            retryAfterHeader: null,
+            maxRetryAfterMs: this.maxRetryAfterMs,
+            remainingMs: remaining,
+            random: this.random,
+          });
+          if (!(wait >= remaining && wait > 0)) {
+            attempt += 1;
+            await this.sleep(wait, combined);
+            if (this.now() - started < this.timeoutMs) continue;
+          }
+        }
+        const wrapped = new Error('Network request failed');
+        wrapped.name = 'FadNetworkError';
+        throw wrapped;
+      }
+      const retryable = response.status === 429 || response.status === 503;
+      const remaining = this.timeoutMs - (this.now() - started);
+      if (retryable && attempt < this.maxGetRetries && remaining > 0) {
+        const wait = retryWaitMs({
+          attempt: attempt + 1,
+          retryAfterHeader: response.headers.get('retry-after'),
+          maxRetryAfterMs: this.maxRetryAfterMs,
+          remainingMs: remaining,
+          random: this.random,
+        });
+        if (wait >= remaining && wait > 0) return response;
+        attempt += 1;
+        await response.arrayBuffer().catch(() => undefined);
+        await this.sleep(wait, combined);
+        if (this.now() - started >= this.timeoutMs) return response;
+        continue;
+      }
+      return response;
+    }
+  }
+
+  private async agentWrite(
+    path: string,
+    method: 'POST' | 'PATCH',
+    body: unknown,
+    options: IdempotentOptions | PreconditionOptions,
+    precondition: boolean,
+  ): Promise<AgentResult> {
+    if (typeof options.idempotencyKey !== 'string' || options.idempotencyKey.length === 0) {
+      throw new Error('idempotencyKey is required');
+    }
+    const headers: Record<string, string> = { 'Idempotency-Key': options.idempotencyKey };
+    if (precondition) {
+      const tag = (options as PreconditionOptions).ifMatch;
+      if (typeof tag !== 'string' || tag.length === 0) throw new Error('ifMatch is required');
+      headers['If-Match'] = tag;
+    }
+    const key = await this.resolveKey();
+    const response = await this.sendJson(path, method, body, headers, options.signal, key);
+    const parsed = await readJson(response, key);
+    if ((response.status === 200 || response.status === 201) && isAgentResponse(parsed)) {
+      const etag = response.headers.get('etag') ?? '';
+      if (!/^"agent-v[1-9][0-9]*"$/.test(etag)) {
+        throw new FadApiError(response.status, 'INVALID_RESPONSE', 'Response did not include a strong ETag', headerRequestId(response));
+      }
+      const location = response.headers.get('location') ?? undefined;
+      return location ? { ...parsed, etag, location } : { ...parsed, etag };
+    }
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async agentRead(path: string, options?: CallOptions): Promise<AgentResult> {
+    const key = await this.resolveKey();
+    const response = await this.send(path, true, options?.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isAgentResponse(parsed)) {
+      const etag = response.headers.get('etag') ?? '';
+      if (!/^"agent-v[1-9][0-9]*"$/.test(etag)) {
+        throw new FadApiError(response.status, 'INVALID_RESPONSE', 'Response did not include a strong ETag', headerRequestId(response));
+      }
+      return { ...parsed, etag };
+    }
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async agentList(query: AgentListQuery, options?: CallOptions): Promise<AgentPage> {
+    const params = new URLSearchParams();
+    if (query.status) params.set('status', query.status);
+    if (query.limit !== undefined) params.set('limit', String(query.limit));
+    if (query.cursor) params.set('cursor', query.cursor);
+    const suffix = params.size > 0 ? `?${params.toString()}` : '';
+    const key = await this.resolveKey();
+    const response = await this.send(`/v1/agents${suffix}`, true, options?.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isAgentPage(parsed)) return parsed;
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async *iterateAgents(query: AgentListQuery, options?: CallOptions): AsyncGenerator<Agent> {
+    let cursor = query.cursor;
+    for (;;) {
+      const page = await this.agentList({ ...query, cursor }, options);
+      for (const agent of page.data) yield agent;
+      const next = page.meta.next_cursor;
+      if (next === null || next === cursor) return;
+      cursor = next;
     }
   }
 }
@@ -307,4 +543,38 @@ function isOrganizationResponse(value: unknown): value is FadResponse<Organizati
     && typeof value.data.created_at === 'string'
     && typeof value.meta.request_id === 'string'
     && value.meta.api_version === 'v1';
+}
+
+function isAgent(value: unknown): value is Agent {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string'
+    && typeof value.global_id === 'string'
+    && typeof value.organization_id === 'string'
+    && typeof value.name === 'string'
+    && typeof value.description === 'string'
+    && typeof value.owner_principal_id === 'string'
+    && (value.status === 'active' || value.status === 'suspended' || value.status === 'retired')
+    && typeof value.revision === 'number'
+    && typeof value.created_at === 'string'
+    && typeof value.updated_at === 'string'
+    && typeof value.created_by === 'string'
+    && typeof value.updated_by === 'string';
+}
+
+function isAgentResponse(value: unknown): value is FadResponse<Agent> {
+  return isRecord(value)
+    && isAgent(value.data)
+    && isRecord(value.meta)
+    && typeof value.meta.request_id === 'string'
+    && value.meta.api_version === 'v1';
+}
+
+function isAgentPage(value: unknown): value is AgentPage {
+  if (!isRecord(value) || !Array.isArray(value.data) || !isRecord(value.meta)) return false;
+  const next = value.meta.next_cursor;
+  return value.data.every((item) => isAgent(item))
+    && typeof value.meta.request_id === 'string'
+    && value.meta.api_version === 'v1'
+    && typeof value.meta.limit === 'number'
+    && (typeof next === 'string' || next === null);
 }

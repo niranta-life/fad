@@ -1,0 +1,21 @@
+{
+  "ok": true,
+  "slice0_package_sha256": "bb5a6dc96ae93fb42ed6b69af1770cd435bba43809c8942b0702d9a748beb4cc",
+  "slice0_package_unchanged": true,
+  "published_sha256": "b4b21c2ba3d05abccb46faf4c3a074f8fb1ecc46e4984ef9a3dba088354f61c4",
+  "preserved_operations": [
+    "get /health/live",
+    "get /health/ready",
+    "get /v1/organizations/current"
+  ],
+  "added_operations": [
+    "post /v1/agents",
+    "get /v1/agents",
+    "get /v1/agents/{agentId}",
+    "patch /v1/agents/{agentId}",
+    "post /v1/agents/{agentId}/suspend",
+    "post /v1/agents/{agentId}/activate",
+    "post /v1/agents/{agentId}/retire"
+  ],
+  "breaking": []
+}

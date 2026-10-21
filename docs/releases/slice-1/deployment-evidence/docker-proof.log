@@ -1,0 +1,22 @@
+slice1-image sha256:9e85c000d407c55810ea2f1e23853328581dbb56072b57800643d10bc231bb85 linux/arm64 node
+old-image sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f node
+fad-s1-api-1-started a8bdfc4d1386
+fad-s1-api-2-started 28d4e843ae30
+live-1 200
+live-2 200
+ready-1 200
+ready-2 200
+docker-register 201 etag="agent-v1" location=/v1/agents/0ac87a0d-d7e9-424d-b498-777408f708a4 revision=1
+docker-replica-get 200 id-match=true
+2026-10-21T02:51:02.096Z PASS docker-register
+ready-after-restart 200
+docker-replay-after-restart 201 same=true
+2026-10-21T02:51:02.590Z PASS docker-replay
+2026-10-21T02:51:02.711Z PASS docker-logs
+fad-s1-old-started 3db8c18d8cd0
+old-live 200
+old-ready 200
+old-current 200 org-match=true
+old-no-agent-route 404
+2026-10-21T02:51:03.255Z PASS old-image
+docker-proof-done

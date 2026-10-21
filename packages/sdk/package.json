@@ -1,7 +1,7 @@
 {
   "name": "@fad/sdk",
-  "version": "0.1.0",
-  "description": "TypeScript client for the Federated Agent Directory Slice 0 API",
+  "version": "0.2.0",
+  "description": "TypeScript client for the Federated Agent Directory API",
   "type": "module",
   "main": "./dist/cjs/index.js",
   "types": "./dist/index.d.ts",

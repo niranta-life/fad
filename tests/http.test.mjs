@@ -112,7 +112,13 @@ test('HTTP tenant boundary, credentials, replicas, and database outage', async (
   const expired = parseJson((await admin([
     'credential', 'issue', '--organization-id', orgA.id, '--principal-id', principalA.id, '--scopes', 'organizations:read',
   ])).stdout);
-  await cleaner.query(`UPDATE api_credentials SET expires_at = created_at + interval '1 millisecond' WHERE kid = $1`, [expired.kid]);
+  await cleaner.query(
+    `UPDATE api_credentials
+     SET created_at = timestamptz '2000-01-01T00:00:00Z',
+         expires_at = timestamptz '2000-01-01T00:00:01Z'
+     WHERE kid = $1`,
+    [expired.kid],
+  );
   const expiredResponse = await request(`${second.base}/v1/organizations/current`, { headers: { 'X-FAD-API-Key': expired.api_key } });
   check('S0-A09-expired', expiredResponse.status === 401 && expiredResponse.json.error.code === 'UNAUTHORIZED');
 

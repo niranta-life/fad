@@ -5,10 +5,16 @@ import { redactText } from '@fad/auth-core';
 import { contract, errorEnvelope, successEnvelope, type ErrorCode } from '@fad/contract';
 import { cleanupRateLimits, consumeRateLimit, isDependencyError, rateLimitBucket, readMigrationFiles } from '@fad/db';
 import type { Pool } from 'pg';
+import { registerAgentRoutes } from './agent-routes.js';
 import { resolveCurrentOrganization } from './auth.js';
 import type { AppConfig } from './config.js';
 
-const PATHS = new Set(['/health/live', '/health/ready', '/v1/organizations/current']);
+const PATHS = new Set(['/health/live', '/health/ready', '/v1/organizations/current', '/v1/agents']);
+const AGENT_PATH = /^\/v1\/agents\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?:\/(?:suspend|activate|retire))?$/i;
+
+function knownPath(path: string): boolean {
+  return PATHS.has(path) || AGENT_PATH.test(path);
+}
 
 export interface AppHandle {
   app: FastifyInstance;
@@ -130,8 +136,21 @@ export async function buildApp(options: {
       ? Number((error as { statusCode?: number }).statusCode)
       : 500;
     const dependency = isDependencyError(error) || statusCode === 503;
-    const code: ErrorCode = statusCode === 413 ? 'PAYLOAD_TOO_LARGE' : dependency ? 'DEPENDENCY_UNAVAILABLE' : 'INTERNAL_ERROR';
-    const status = statusCode === 413 ? 413 : dependency ? 503 : 500;
+    let status = 500;
+    let code: ErrorCode = 'INTERNAL_ERROR';
+    if (statusCode === 413) {
+      status = 413;
+      code = 'PAYLOAD_TOO_LARGE';
+    } else if (statusCode === 415) {
+      status = 415;
+      code = 'UNSUPPORTED_MEDIA_TYPE';
+    } else if (statusCode === 400) {
+      status = 400;
+      code = 'VALIDATION_ERROR';
+    } else if (dependency) {
+      status = 503;
+      code = 'DEPENDENCY_UNAVAILABLE';
+    }
     const errorName = error instanceof Error ? error.name : 'Error';
     const errorMessage = error instanceof Error ? error.message : 'unknown';
     request.log.error({ request_id: requestId, status, error_code: code, error_name: errorName, error_message: errorMessage }, 'request failed');
@@ -141,7 +160,7 @@ export async function buildApp(options: {
   app.setNotFoundHandler((request, reply) => {
     const path = request.url.split('?')[0] ?? '';
     const requestId = String(request.id);
-    if (PATHS.has(path)) return sendError(reply, requestId, 405, 'METHOD_NOT_ALLOWED');
+    if (knownPath(path)) return sendError(reply, requestId, 405, 'METHOD_NOT_ALLOWED');
     return sendError(reply, requestId, 404, 'NOT_FOUND');
   });
 
@@ -191,6 +210,15 @@ export async function buildApp(options: {
       if (isDependencyError(error)) return sendError(reply, requestId, 503, 'DEPENDENCY_UNAVAILABLE');
       throw error;
     }
+  });
+
+  registerAgentRoutes(app, {
+    pool,
+    config,
+    send,
+    sendError,
+    limitRequest,
+    migrationsMatch,
   });
 
   return {

@@ -72,6 +72,64 @@ export async function writeIdempotency(client: PoolClient, input: IdempotencyWri
   return { replay: true, responseStatus: row.response_status, responseBody: row.response_body };
 }
 
+export async function beginIdempotency(
+  client: PoolClient,
+  input: {
+    organizationId: string;
+    principalId: string;
+    method: 'POST' | 'PATCH';
+    resourcePath: string;
+    idemKey: string;
+    requestSha256: Buffer;
+  },
+): Promise<
+  | { kind: 'proceed' }
+  | { kind: 'replay'; responseStatus: number; responseBody: unknown; responseHeaders: Record<string, string> }
+> {
+  const material = [
+    input.organizationId,
+    input.principalId,
+    input.method,
+    input.resourcePath,
+    input.idemKey,
+  ].join('|');
+  const digest = createHash('sha256').update(material).digest();
+  // Same-key callers share this transaction lock. fad_app has no UPDATE on the table, so the read is not FOR UPDATE.
+  await client.query('SELECT pg_advisory_xact_lock($1::int4, $2::int4)', [digest.readInt32BE(0), digest.readInt32BE(4)]);
+  const existing = await client.query<{
+    request_sha256: Buffer;
+    response_status: number;
+    response_body: unknown;
+    response_headers: Record<string, string> | null;
+    expires_at: Date;
+  }>(
+    `SELECT request_sha256, response_status, response_body, response_headers, expires_at
+     FROM idempotency_records
+     WHERE organization_id = $1 AND principal_id = $2 AND method = $3 AND resource_path = $4 AND idem_key = $5`,
+    [input.organizationId, input.principalId, input.method, input.resourcePath, input.idemKey],
+  );
+  const row = existing.rows[0];
+  if (!row) return { kind: 'proceed' };
+  const expiresAt = row.expires_at instanceof Date ? row.expires_at : new Date(row.expires_at);
+  if (expiresAt.getTime() <= Date.now()) {
+    await client.query(
+      `DELETE FROM idempotency_records
+       WHERE organization_id = $1 AND principal_id = $2 AND method = $3 AND resource_path = $4 AND idem_key = $5`,
+      [input.organizationId, input.principalId, input.method, input.resourcePath, input.idemKey],
+    );
+    return { kind: 'proceed' };
+  }
+  if (!Buffer.isBuffer(row.request_sha256) || !row.request_sha256.equals(input.requestSha256)) {
+    throw new IdempotencyConflictError();
+  }
+  return {
+    kind: 'replay',
+    responseStatus: row.response_status,
+    responseBody: row.response_body,
+    responseHeaders: row.response_headers ?? {},
+  };
+}
+
 export async function deleteExpiredIdempotency(client: PoolClient, now = new Date()): Promise<number> {
   const result = await client.query('DELETE FROM idempotency_records WHERE expires_at < $1', [now]);
   return result.rowCount ?? 0;

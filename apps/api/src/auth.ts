@@ -24,6 +24,17 @@ export type CurrentOrganizationResult =
   | { kind: 'forbidden' }
   | { kind: 'unavailable' };
 
+export interface VerifiedCaller {
+  organization: CurrentOrganization;
+  principalId: string;
+  scopes: string[];
+}
+
+export type VerifiedCredentialResult =
+  | { kind: 'ok'; caller: VerifiedCaller }
+  | { kind: 'unauthorized' }
+  | { kind: 'unavailable' };
+
 interface CredentialRow {
   organization_id: string;
   principal_id: string;
@@ -57,12 +68,12 @@ function asDate(value: Date | string | null): Date | null {
   return parsed;
 }
 
-export async function resolveCurrentOrganization(
+export async function verifyCredential(
   pool: Pool,
   rawHeaders: readonly string[],
   pepper: Buffer,
   now = new Date(),
-): Promise<CurrentOrganizationResult> {
+): Promise<VerifiedCredentialResult> {
   const header = readCredentialHeader(rawHeaders);
   if (!header.ok) {
     burn(pepper, '0'.repeat(32), 'A'.repeat(43), DUMMY_VERIFIER);
@@ -114,17 +125,18 @@ export async function resolveCurrentOrganization(
       if (!org || org.status !== 'active' || !actor || actor.status !== 'active') {
         return { kind: 'unauthorized' as const };
       }
-      if (!hasScope(row.scopes, 'organizations:read')) {
-        return { kind: 'forbidden' as const };
-      }
       const created = org.created_at instanceof Date ? org.created_at : new Date(org.created_at);
       return {
         kind: 'ok' as const,
-        organization: {
-          id: org.id,
-          name: org.name,
-          status: 'active',
-          created_at: created.toISOString(),
+        caller: {
+          organization: {
+            id: org.id,
+            name: org.name,
+            status: 'active',
+            created_at: created.toISOString(),
+          },
+          principalId: row.principal_id,
+          scopes: row.scopes,
         },
       };
     });
@@ -132,4 +144,16 @@ export async function resolveCurrentOrganization(
     if (unavailableError(err)) return { kind: 'unavailable' };
     throw err;
   }
+}
+
+export async function resolveCurrentOrganization(
+  pool: Pool,
+  rawHeaders: readonly string[],
+  pepper: Buffer,
+  now = new Date(),
+): Promise<CurrentOrganizationResult> {
+  const verified = await verifyCredential(pool, rawHeaders, pepper, now);
+  if (verified.kind !== 'ok') return verified;
+  if (!hasScope(verified.caller.scopes, 'organizations:read')) return { kind: 'forbidden' };
+  return { kind: 'ok', organization: verified.caller.organization };
 }

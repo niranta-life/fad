@@ -1,0 +1,17 @@
+source-counts-exit 0
+source-counts 140,221,182,0001_foundation 0002_rate_limit 20261020_001_agents 20261020_002_principal_lock
+source-rls-exit 0
+source-rls agent_lifecycle_events:true:true:postgres | agent_revisions:true:true:postgres | agents:true:true:postgres
+pg-dump-exit 0
+dump-copy-exit 0
+dump-bytes 200000
+restore-container-exit 0
+restore-ready true
+restore-roles-exit 0
+pg-restore-exit 0
+restored-counts-exit 0
+restored-counts 140,221,182,0001_foundation 0002_rate_limit 20261020_001_agents 20261020_002_principal_lock
+restored-rls agent_lifecycle_events:true:true:postgres | agent_revisions:true:true:postgres | agents:true:true:postgres
+restore-result PASS
+restore-container-removed yes
+dump-file-deleted yes

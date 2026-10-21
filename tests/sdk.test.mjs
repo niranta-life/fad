@@ -273,8 +273,15 @@ test('SDK retries, cancellation, redirects, and the live API', async () => {
   }
   check('S0-K03-401', badError instanceof FadApiError && badError.status === 401 && !api.logs().includes(key.api_key) && !api.logs().includes(pepper),
     `status=${badError && badError.status} code=${badError && badError.code}`);
-  const agents = Object.keys(client);
-  check('sdk-no-agents', !agents.includes('agents') && typeof client.organizations.current === 'function');
+  check('sdk-agents', typeof client.agents.register === 'function'
+    && typeof client.agents.get === 'function'
+    && typeof client.agents.list === 'function'
+    && typeof client.agents.update === 'function'
+    && typeof client.agents.suspend === 'function'
+    && typeof client.agents.activate === 'function'
+    && typeof client.agents.retire === 'function'
+    && typeof client.agents.iterate === 'function'
+    && typeof client.organizations.current === 'function');
   await api.stop();
   } finally {
     await stopApis();

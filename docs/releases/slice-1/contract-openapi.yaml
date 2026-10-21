@@ -1,0 +1,693 @@
+openapi: 3.1.0
+info:
+  title: Federated Agent Directory API
+  version: 1.1.0
+  description: |
+    Normative public HTTP contract. Header authentication with X-FAD-API-Key
+    is scoped to a single organization and principal. A supplied
+    tenant/organization selector never changes the authenticated tenant.
+    Health and the current organization are the Slice 0 operations. Agent
+    registration and lifecycle are additive Slice 1 operations.
+servers:
+  - url: https://fad.example.internal
+security:
+  - FadApiKey: []
+tags:
+  - name: Health
+  - name: Organizations
+  - name: Agents
+paths:
+  /health/live:
+    get:
+      tags: [Health]
+      operationId: getLiveness
+      summary: Process liveness (not database readiness)
+      security: []
+      responses:
+        '200':
+          description: Process is responsive
+          headers:
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Liveness' }
+              example: { status: ok }
+        '503': { $ref: '#/components/responses/HealthUnavailable' }
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: getReadiness
+      summary: Ready to serve authenticated requests
+      description: |
+        Requires database reachability and a compatible applied schema version.
+        Returns no hostnames, credential details, SQL errors or internals.
+      security: []
+      responses:
+        '200':
+          description: Ready
+          headers:
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Readiness' }
+              example: { status: ready }
+        '503': { $ref: '#/components/responses/HealthUnavailable' }
+  /v1/organizations/current:
+    get:
+      tags: [Organizations]
+      operationId: getCurrentOrganization
+      summary: Return organization bound to caller's verified API key
+      description: |
+        Requires organizations:read. The caller cannot select an organization
+        using a header, query parameter, or body. Unknown query parameters
+        return 400 VALIDATION_ERROR.
+      responses:
+        '200':
+          description: Organization for authenticated credential
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrganizationResponse' }
+              example:
+                data:
+                  id: b4fbb090-335b-4c59-bc0e-5b382ee986b5
+                  name: Example Finance
+                  status: active
+                  created_at: '2026-10-20T12:00:00.000Z'
+                meta:
+                  request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda
+                  api_version: v1
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/agents:
+    post:
+      tags: [Agents]
+      operationId: registerAgent
+      summary: Register an agent in the authenticated organization
+      description: |
+        Requires agents:write and Idempotency-Key. The server chooses the agent
+        id, global_id, status, revision, and audit identity. organization_id in
+        the body is rejected. An identical replay returns 201 and the same agent.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AgentCreate' }
+      responses:
+        '201':
+          description: Agent registered
+          headers:
+            Location: { $ref: '#/components/headers/AgentLocation' }
+            ETag: { $ref: '#/components/headers/AgentETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/IdempotencyConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    get:
+      tags: [Agents]
+      operationId: listAgents
+      summary: List agents in the authenticated organization
+      description: |
+        Requires agents:read. Ordered by created_at descending, then id
+        descending. limit defaults to 25 and cannot exceed 100. Unknown query
+        parameters return 400 VALIDATION_ERROR.
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/AgentStatus' }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 4096 }
+      responses:
+        '200':
+          description: One page of agents
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/agents/{agentId}:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    get:
+      tags: [Agents]
+      operationId: getAgent
+      summary: Get one agent
+      description: |
+        Requires agents:read. A missing agent and an agent in another
+        organization both return 404 AGENT_NOT_FOUND.
+      responses:
+        '200':
+          description: Agent found
+          headers:
+            ETag: { $ref: '#/components/headers/AgentETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AgentNotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    patch:
+      tags: [Agents]
+      operationId: updateAgent
+      summary: Update agent name, description, or owner
+      description: |
+        Requires agents:write, Idempotency-Key, and a strong If-Match value.
+        The body is a partial document. Only supplied fields change.
+        description null clears the description. status cannot be changed here.
+        A retired agent cannot be edited. A no-op keeps the revision.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AgentUpdate' }
+      responses:
+        '200':
+          description: Current agent after the update
+          headers:
+            ETag: { $ref: '#/components/headers/AgentETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AgentNotFound' }
+        '409': { $ref: '#/components/responses/AgentConflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/agents/{agentId}/suspend:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    post:
+      tags: [Agents]
+      operationId: suspendAgent
+      summary: Suspend an agent
+      description: |
+        Requires agents:lifecycle. Suspended to suspended is a no-op and does
+        not increase the revision. Retired to suspended returns 409.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LifecycleRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AgentChanged' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AgentNotFound' }
+        '409': { $ref: '#/components/responses/AgentConflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/agents/{agentId}/activate:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    post:
+      tags: [Agents]
+      operationId: activateAgent
+      summary: Activate a suspended agent
+      description: |
+        Requires agents:lifecycle. Active to active is a no-op. Retired is
+        terminal and returns 409.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LifecycleRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AgentChanged' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AgentNotFound' }
+        '409': { $ref: '#/components/responses/AgentConflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/agents/{agentId}/retire:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    post:
+      tags: [Agents]
+      operationId: retireAgent
+      summary: Retire an agent
+      description: |
+        Requires agents:lifecycle. Retired to retired is a no-op. A retired
+        agent stays readable and cannot be activated or patched.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LifecycleRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AgentChanged' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AgentNotFound' }
+        '409': { $ref: '#/components/responses/AgentConflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+components:
+  securitySchemes:
+    FadApiKey:
+      type: apiKey
+      in: header
+      name: X-FAD-API-Key
+      description: |
+        Opaque organization-scoped machine credential. Never put keys in URLs,
+        request bodies, logs, telemetry, examples, or client-side applications.
+  parameters:
+    AgentId:
+      name: agentId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 8, maxLength: 128, pattern: '^[A-Za-z0-9._:-]+$' }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Exact strong ETag, for example "agent-v2". Wildcards and weak tags are rejected.
+      schema: { type: string, pattern: '^"agent-v[1-9][0-9]*"$' }
+  headers:
+    RequestId:
+      description: Unique server-generated request correlation UUID.
+      schema: { type: string, format: uuid }
+    PrivateNoStore:
+      description: For protected responses, always private and no-store.
+      schema: { type: string, const: 'private, no-store' }
+    NoStore:
+      description: Health response caching is prohibited.
+      schema: { type: string, const: no-store }
+    RetryAfter:
+      description: Whole number of seconds to wait before retry.
+      schema: { type: integer, minimum: 1 }
+    AgentETag:
+      description: Strong ETag for this agent representation.
+      schema: { type: string, pattern: '^"agent-v[1-9][0-9]*"$' }
+    AgentLocation:
+      description: Relative URI of the created agent.
+      schema: { type: string, pattern: '^/v1/agents/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }
+  schemas:
+    Liveness:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, const: ok }
+    Readiness:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, enum: [ready, not_ready] }
+    Organization:
+      type: object
+      additionalProperties: false
+      required: [id, name, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 160 }
+        status: { type: string, enum: [active, suspended] }
+        created_at: { type: string, format: date-time }
+    ResponseMeta:
+      type: object
+      additionalProperties: true
+      required: [request_id, api_version]
+      properties:
+        request_id: { type: string, format: uuid }
+        api_version: { type: string, const: v1 }
+    OrganizationResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Organization' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    ErrorData:
+      type: object
+      additionalProperties: true
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          pattern: '^[A-Z][A-Z0-9_]*$'
+          examples: [VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, RATE_LIMITED, DEPENDENCY_UNAVAILABLE, INTERNAL_ERROR]
+        message: { type: string, minLength: 1 }
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error, meta]
+      properties:
+        error: { $ref: '#/components/schemas/ErrorData' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    HealthUnavailable:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, const: not_ready }
+    AgentStatus:
+      type: string
+      enum: [active, suspended, retired]
+      description: Directory status only. It is not an invocation permission.
+    Agent:
+      type: object
+      additionalProperties: false
+      required: [id, global_id, organization_id, name, description, owner_principal_id, status, revision, created_at, updated_at, created_by, updated_by]
+      properties:
+        id: { type: string, format: uuid, readOnly: true }
+        global_id:
+          type: string
+          readOnly: true
+          description: Immutable urn:fad:agent:<organization_uuid>:<agent_uuid>. Derived, not stored as a client field.
+          pattern: '^urn:fad:agent:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        organization_id: { type: string, format: uuid, readOnly: true }
+        name:
+          type: string
+          minLength: 1
+          description: 1–160 Unicode code points after NFC trim. No control characters.
+        description:
+          type: string
+          description: 0–2000 Unicode code points. Empty when omitted on create or cleared with null on update.
+        owner_principal_id: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/AgentStatus' }
+        revision: { type: integer, minimum: 1, format: int64 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        created_by: { type: string, format: uuid }
+        updated_by: { type: string, format: uuid }
+    AgentCreate:
+      type: object
+      additionalProperties: false
+      required: [name, owner_principal_id]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: 1–160 Unicode code points after NFC trim.
+        description:
+          type: string
+          description: Optional. 0–2000 Unicode code points. Null is rejected on create.
+        owner_principal_id: { type: string, format: uuid }
+    AgentUpdate:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: 1–160 Unicode code points after NFC trim.
+        description:
+          type: [string, 'null']
+          description: Null clears the description. Omit the field to leave it unchanged.
+        owner_principal_id: { type: string, format: uuid }
+    LifecycleRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          description: 1–500 Unicode code points after NFC trim. Stored in lifecycle history, not on the agent.
+    PageMeta:
+      type: object
+      additionalProperties: false
+      required: [request_id, api_version, limit, next_cursor]
+      properties:
+        request_id: { type: string, format: uuid }
+        api_version: { type: string, const: v1 }
+        limit: { type: integer, minimum: 1, maximum: 100 }
+        next_cursor: { type: [string, 'null'] }
+    AgentResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Agent' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    AgentListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Agent' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+  responses:
+    HealthUnavailable:
+      description: Process is not ready to serve traffic
+      headers:
+        Cache-Control: { $ref: '#/components/headers/NoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/HealthUnavailable' }
+          example: { status: not_ready }
+    BadRequest:
+      description: Malformed request or unknown query parameters
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: VALIDATION_ERROR, message: Invalid request. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    Unauthorized:
+      description: Missing, unknown, invalid, expired, or revoked credential; inactive principal or organization
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: UNAUTHORIZED, message: Invalid or missing API credential. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    Forbidden:
+      description: Authenticated principal lacks required action scope
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: FORBIDDEN, message: Insufficient permission. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    RateLimited:
+      description: Caller exceeds request quota
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: RATE_LIMITED, message: Request limit exceeded. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    InternalError:
+      description: Unexpected application failure (internal details redacted)
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: INTERNAL_ERROR, message: Internal server error. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    DependencyUnavailable:
+      description: Required database or other critical dependency unavailable
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: DEPENDENCY_UNAVAILABLE, message: Service temporarily unavailable. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    AgentChanged:
+      description: Agent after a lifecycle transition. A no-op keeps the revision.
+      headers:
+        ETag: { $ref: '#/components/headers/AgentETag' }
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/AgentResponse' }
+    AgentNotFound:
+      description: The agent does not exist in the authenticated organization
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: AGENT_NOT_FOUND, message: Agent not found. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    AgentConflict:
+      description: Retired agent cannot take this change, or the idempotency key was reused with a different request
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: INVALID_STATE_TRANSITION, message: The agent status does not allow this change. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    IdempotencyConflict:
+      description: Idempotency key was reused with a different normalized request
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: IDEMPOTENCY_CONFLICT, message: Idempotency key was reused with a different request. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    PreconditionFailed:
+      description: If-Match does not match the current agent revision
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: PRECONDITION_FAILED, message: The agent has changed. Fetch its current representation and retry. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    PreconditionRequired:
+      description: If-Match is required
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: PRECONDITION_REQUIRED, message: If-Match is required. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    Unprocessable:
+      description: The JSON is an object but fails field validation
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: VALIDATION_ERROR, message: Invalid request. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    PayloadTooLarge:
+      description: Body exceeds 16 KiB
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: PAYLOAD_TOO_LARGE, message: Request body is too large. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    UnsupportedMediaType:
+      description: Mutation Content-Type is not application/json
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: UNSUPPORTED_MEDIA_TYPE, message: Content-Type must be application/json. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }

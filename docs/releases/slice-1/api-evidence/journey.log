@@ -1,0 +1,203 @@
+replica-1 http://127.0.0.1:59192
+replica-2 http://127.0.0.1:59197
+$ curl -X POST http://127.0.0.1:59192/v1/agents -H content-type: application/json -H x-fad-api-key: REDACTED -H idempotency-key: journey-register-0001 --data {"name":"  Journey Agent  ","description":"Supplier invoice workflow","owner_principal_id":"2b425216-569e-4b7a-aa3c-46dd1de1be4a"}
+HTTP/1.1 201 Created
+x-request-id: da348588-8fb5-462e-874c-4877c5e6318b
+x-content-type-options: nosniff
+etag: "agent-v1"
+location: /v1/agents/b254fe32-e1d7-4750-80c5-d33dc681d6b2
+cache-control: private, no-store
+content-type: application/json; charset=utf-8
+content-length: 633
+Date: Wed, 21 Oct 2026 02:50:57 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+{"data":{"id":"b254fe32-e1d7-4750-80c5-d33dc681d6b2","global_id":"urn:fad:agent:a8d9c43e-f4e9-475f-a274-c65014cbf9cd:b254fe32-e1d7-4750-80c5-d33dc681d6b2","organization_id":"a8d9c43e-f4e9-475f-a274-c65014cbf9cd","name":"Journey Agent","description":"Supplier invoice workflow","owner_principal_id":"2b425216-569e-4b7a-aa3c-46dd1de1be4a","status":"active","revision":1,"created_at":"2026-10-21T02:50:57.203Z","updated_at":"2026-10-21T02:50:57.203Z","created_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030","updated_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030"},"meta":{"request_id":"da348588-8fb5-462e-874c-4877c5e6318b","api_version":"v1"}}
+curl-exit 0
+$ curl -X POST http://127.0.0.1:59197/v1/agents -H content-type: application/json -H x-fad-api-key: REDACTED -H idempotency-key: journey-register-0001 --data {"name":"  Journey Agent  ","description":"Supplier invoice workflow","owner_principal_id":"2b425216-569e-4b7a-aa3c-46dd1de1be4a"}
+HTTP/1.1 201 Created
+x-request-id: bf2ff1e2-17ab-481d-bd47-0b6ebebe1c33
+x-content-type-options: nosniff
+etag: "agent-v1"
+location: /v1/agents/b254fe32-e1d7-4750-80c5-d33dc681d6b2
+cache-control: private, no-store
+content-type: application/json; charset=utf-8
+content-length: 633
+Date: Wed, 21 Oct 2026 02:50:57 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+{"data":{"id":"b254fe32-e1d7-4750-80c5-d33dc681d6b2","name":"Journey Agent","status":"active","revision":1,"global_id":"urn:fad:agent:a8d9c43e-f4e9-475f-a274-c65014cbf9cd:b254fe32-e1d7-4750-80c5-d33dc681d6b2","created_at":"2026-10-21T02:50:57.203Z","created_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030","updated_at":"2026-10-21T02:50:57.203Z","updated_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030","description":"Supplier invoice workflow","organization_id":"a8d9c43e-f4e9-475f-a274-c65014cbf9cd","owner_principal_id":"2b425216-569e-4b7a-aa3c-46dd1de1be4a"},"meta":{"request_id":"bf2ff1e2-17ab-481d-bd47-0b6ebebe1c33","api_version":"v1"}}
+curl-exit 0
+$ curl -X GET http://127.0.0.1:59192/v1/agents/b254fe32-e1d7-4750-80c5-d33dc681d6b2 -H x-fad-api-key: REDACTED
+HTTP/1.1 200 OK
+x-request-id: e16542a3-e544-4445-bc9c-68b8df7920a4
+x-content-type-options: nosniff
+etag: "agent-v1"
+cache-control: private, no-store
+content-type: application/json; charset=utf-8
+content-length: 633
+Date: Wed, 21 Oct 2026 02:50:57 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+{"data":{"id":"b254fe32-e1d7-4750-80c5-d33dc681d6b2","global_id":"urn:fad:agent:a8d9c43e-f4e9-475f-a274-c65014cbf9cd:b254fe32-e1d7-4750-80c5-d33dc681d6b2","organization_id":"a8d9c43e-f4e9-475f-a274-c65014cbf9cd","name":"Journey Agent","description":"Supplier invoice workflow","owner_principal_id":"2b425216-569e-4b7a-aa3c-46dd1de1be4a","status":"active","revision":1,"created_at":"2026-10-21T02:50:57.203Z","updated_at":"2026-10-21T02:50:57.203Z","created_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030","updated_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030"},"meta":{"request_id":"e16542a3-e544-4445-bc9c-68b8df7920a4","api_version":"v1"}}
+curl-exit 0
+$ curl -X GET http://127.0.0.1:59192/v1/agents?limit=25 -H x-fad-api-key: REDACTED
+HTTP/1.1 200 OK
+x-request-id: 8cdc10e4-5f08-441a-8558-f19a8368b64a
+x-content-type-options: nosniff
+cache-control: private, no-store
+content-type: application/json; charset=utf-8
+content-length: 665
+Date: Wed, 21 Oct 2026 02:50:57 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+{"data":[{"id":"b254fe32-e1d7-4750-80c5-d33dc681d6b2","global_id":"urn:fad:agent:a8d9c43e-f4e9-475f-a274-c65014cbf9cd:b254fe32-e1d7-4750-80c5-d33dc681d6b2","organization_id":"a8d9c43e-f4e9-475f-a274-c65014cbf9cd","name":"Journey Agent","description":"Supplier invoice workflow","owner_principal_id":"2b425216-569e-4b7a-aa3c-46dd1de1be4a","status":"active","revision":1,"created_at":"2026-10-21T02:50:57.203Z","updated_at":"2026-10-21T02:50:57.203Z","created_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030","updated_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030"}],"meta":{"request_id":"8cdc10e4-5f08-441a-8558-f19a8368b64a","api_version":"v1","limit":25,"next_cursor":null}}
+curl-exit 0
+$ curl -X GET http://127.0.0.1:59197/v1/agents/b254fe32-e1d7-4750-80c5-d33dc681d6b2 -H x-fad-api-key: REDACTED
+HTTP/1.1 404 Not Found
+x-request-id: 911364ea-f0f9-402d-9327-ae1409803063
+x-content-type-options: nosniff
+cache-control: private, no-store
+content-type: application/json; charset=utf-8
+content-length: 145
+Date: Wed, 21 Oct 2026 02:50:57 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+{"error":{"code":"AGENT_NOT_FOUND","message":"Agent not found."},"meta":{"request_id":"911364ea-f0f9-402d-9327-ae1409803063","api_version":"v1"}}
+curl-exit 0
+$ curl -X PATCH http://127.0.0.1:59192/v1/agents/b254fe32-e1d7-4750-80c5-d33dc681d6b2 -H content-type: application/json -H x-fad-api-key: REDACTED -H idempotency-key: journey-patch-0001 -H if-match: "agent-v1" --data {"description":"Updated by journey"}
+HTTP/1.1 200 OK
+x-request-id: 2ea4b039-3f74-4388-bd9e-9561f2ada17d
+x-content-type-options: nosniff
+etag: "agent-v2"
+cache-control: private, no-store
+content-type: application/json; charset=utf-8
+content-length: 626
+Date: Wed, 21 Oct 2026 02:50:57 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+{"data":{"id":"b254fe32-e1d7-4750-80c5-d33dc681d6b2","global_id":"urn:fad:agent:a8d9c43e-f4e9-475f-a274-c65014cbf9cd:b254fe32-e1d7-4750-80c5-d33dc681d6b2","organization_id":"a8d9c43e-f4e9-475f-a274-c65014cbf9cd","name":"Journey Agent","description":"Updated by journey","owner_principal_id":"2b425216-569e-4b7a-aa3c-46dd1de1be4a","status":"active","revision":2,"created_at":"2026-10-21T02:50:57.203Z","updated_at":"2026-10-21T02:50:57.282Z","created_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030","updated_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030"},"meta":{"request_id":"2ea4b039-3f74-4388-bd9e-9561f2ada17d","api_version":"v1"}}
+curl-exit 0
+$ curl -X PATCH http://127.0.0.1:59197/v1/agents/b254fe32-e1d7-4750-80c5-d33dc681d6b2 -H content-type: application/json -H x-fad-api-key: REDACTED -H idempotency-key: journey-patch-stale -H if-match: "agent-v1" --data {"description":"stale"}
+HTTP/1.1 412 Precondition Failed
+x-request-id: f7ea52a6-e65c-4878-a46a-1b7a74b4c0ee
+x-content-type-options: nosniff
+cache-control: private, no-store
+content-type: application/json; charset=utf-8
+content-length: 199
+Date: Wed, 21 Oct 2026 02:50:57 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+{"error":{"code":"PRECONDITION_FAILED","message":"The agent has changed. Fetch its current representation and retry."},"meta":{"request_id":"f7ea52a6-e65c-4878-a46a-1b7a74b4c0ee","api_version":"v1"}}
+curl-exit 0
+$ curl -X POST http://127.0.0.1:59192/v1/agents/b254fe32-e1d7-4750-80c5-d33dc681d6b2/suspend -H content-type: application/json -H x-fad-api-key: REDACTED -H idempotency-key: journey-suspend-0001 -H if-match: "agent-v2" --data {"reason":"Journey suspend"}
+HTTP/1.1 200 OK
+x-request-id: a71a432a-8acd-41c3-b1c9-2ae30c3ce675
+x-content-type-options: nosniff
+etag: "agent-v3"
+cache-control: private, no-store
+content-type: application/json; charset=utf-8
+content-length: 629
+Date: Wed, 21 Oct 2026 02:50:57 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+{"data":{"id":"b254fe32-e1d7-4750-80c5-d33dc681d6b2","global_id":"urn:fad:agent:a8d9c43e-f4e9-475f-a274-c65014cbf9cd:b254fe32-e1d7-4750-80c5-d33dc681d6b2","organization_id":"a8d9c43e-f4e9-475f-a274-c65014cbf9cd","name":"Journey Agent","description":"Updated by journey","owner_principal_id":"2b425216-569e-4b7a-aa3c-46dd1de1be4a","status":"suspended","revision":3,"created_at":"2026-10-21T02:50:57.203Z","updated_at":"2026-10-21T02:50:57.314Z","created_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030","updated_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030"},"meta":{"request_id":"a71a432a-8acd-41c3-b1c9-2ae30c3ce675","api_version":"v1"}}
+curl-exit 0
+$ curl -X POST http://127.0.0.1:59192/v1/agents/b254fe32-e1d7-4750-80c5-d33dc681d6b2/activate -H content-type: application/json -H x-fad-api-key: REDACTED -H idempotency-key: journey-activate-0001 -H if-match: "agent-v3" --data {"reason":"Journey activate"}
+HTTP/1.1 200 OK
+x-request-id: 2ef0a580-fc6f-4ccf-ba4b-a80a28b9fe40
+x-content-type-options: nosniff
+etag: "agent-v4"
+cache-control: private, no-store
+content-type: application/json; charset=utf-8
+content-length: 626
+Date: Wed, 21 Oct 2026 02:50:57 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+{"data":{"id":"b254fe32-e1d7-4750-80c5-d33dc681d6b2","global_id":"urn:fad:agent:a8d9c43e-f4e9-475f-a274-c65014cbf9cd:b254fe32-e1d7-4750-80c5-d33dc681d6b2","organization_id":"a8d9c43e-f4e9-475f-a274-c65014cbf9cd","name":"Journey Agent","description":"Updated by journey","owner_principal_id":"2b425216-569e-4b7a-aa3c-46dd1de1be4a","status":"active","revision":4,"created_at":"2026-10-21T02:50:57.203Z","updated_at":"2026-10-21T02:50:57.329Z","created_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030","updated_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030"},"meta":{"request_id":"2ef0a580-fc6f-4ccf-ba4b-a80a28b9fe40","api_version":"v1"}}
+curl-exit 0
+$ curl -X POST http://127.0.0.1:59192/v1/agents/b254fe32-e1d7-4750-80c5-d33dc681d6b2/retire -H content-type: application/json -H x-fad-api-key: REDACTED -H idempotency-key: journey-retire-0001 -H if-match: "agent-v4" --data {"reason":"Journey retire"}
+HTTP/1.1 200 OK
+x-request-id: 96c80b32-13f8-4ee0-9e4d-668bedafb281
+x-content-type-options: nosniff
+etag: "agent-v5"
+cache-control: private, no-store
+content-type: application/json; charset=utf-8
+content-length: 627
+Date: Wed, 21 Oct 2026 02:50:57 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+{"data":{"id":"b254fe32-e1d7-4750-80c5-d33dc681d6b2","global_id":"urn:fad:agent:a8d9c43e-f4e9-475f-a274-c65014cbf9cd:b254fe32-e1d7-4750-80c5-d33dc681d6b2","organization_id":"a8d9c43e-f4e9-475f-a274-c65014cbf9cd","name":"Journey Agent","description":"Updated by journey","owner_principal_id":"2b425216-569e-4b7a-aa3c-46dd1de1be4a","status":"retired","revision":5,"created_at":"2026-10-21T02:50:57.203Z","updated_at":"2026-10-21T02:50:57.345Z","created_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030","updated_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030"},"meta":{"request_id":"96c80b32-13f8-4ee0-9e4d-668bedafb281","api_version":"v1"}}
+curl-exit 0
+$ curl -X POST http://127.0.0.1:59197/v1/agents/b254fe32-e1d7-4750-80c5-d33dc681d6b2/activate -H content-type: application/json -H x-fad-api-key: REDACTED -H idempotency-key: journey-activate-retired -H if-match: "agent-v5" --data {"reason":"must fail"}
+HTTP/1.1 409 Conflict
+x-request-id: 2d0e768e-363e-4d48-8893-dbe3fd330c26
+x-content-type-options: nosniff
+cache-control: private, no-store
+content-type: application/json; charset=utf-8
+content-length: 182
+Date: Wed, 21 Oct 2026 02:50:57 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+{"error":{"code":"INVALID_STATE_TRANSITION","message":"The agent status does not allow this change."},"meta":{"request_id":"2d0e768e-363e-4d48-8893-dbe3fd330c26","api_version":"v1"}}
+curl-exit 0
+db-before-restart {"agents":1,"revisions":5,"lifecycle":4,"audits":5}
+db-restart-exit 0
+$ curl -X POST http://127.0.0.1:59214/v1/agents -H content-type: application/json -H x-fad-api-key: REDACTED -H idempotency-key: journey-register-0001 --data {"name":"  Journey Agent  ","description":"Supplier invoice workflow","owner_principal_id":"2b425216-569e-4b7a-aa3c-46dd1de1be4a"}
+HTTP/1.1 201 Created
+x-request-id: fc05a7a3-e6e2-4561-9cfe-277e251256d9
+x-content-type-options: nosniff
+etag: "agent-v1"
+location: /v1/agents/b254fe32-e1d7-4750-80c5-d33dc681d6b2
+cache-control: private, no-store
+content-type: application/json; charset=utf-8
+content-length: 633
+Date: Wed, 21 Oct 2026 02:50:58 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+{"data":{"id":"b254fe32-e1d7-4750-80c5-d33dc681d6b2","name":"Journey Agent","status":"active","revision":1,"global_id":"urn:fad:agent:a8d9c43e-f4e9-475f-a274-c65014cbf9cd:b254fe32-e1d7-4750-80c5-d33dc681d6b2","created_at":"2026-10-21T02:50:57.203Z","created_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030","updated_at":"2026-10-21T02:50:57.203Z","updated_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030","description":"Supplier invoice workflow","organization_id":"a8d9c43e-f4e9-475f-a274-c65014cbf9cd","owner_principal_id":"2b425216-569e-4b7a-aa3c-46dd1de1be4a"},"meta":{"request_id":"fc05a7a3-e6e2-4561-9cfe-277e251256d9","api_version":"v1"}}
+curl-exit 0
+$ curl -X GET http://127.0.0.1:59214/v1/agents/b254fe32-e1d7-4750-80c5-d33dc681d6b2 -H x-fad-api-key: REDACTED
+HTTP/1.1 200 OK
+x-request-id: a88ac3f3-df01-45f7-b10b-8a8cb3995dac
+x-content-type-options: nosniff
+etag: "agent-v5"
+cache-control: private, no-store
+content-type: application/json; charset=utf-8
+content-length: 627
+Date: Wed, 21 Oct 2026 02:50:58 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+{"data":{"id":"b254fe32-e1d7-4750-80c5-d33dc681d6b2","global_id":"urn:fad:agent:a8d9c43e-f4e9-475f-a274-c65014cbf9cd:b254fe32-e1d7-4750-80c5-d33dc681d6b2","organization_id":"a8d9c43e-f4e9-475f-a274-c65014cbf9cd","name":"Journey Agent","description":"Updated by journey","owner_principal_id":"2b425216-569e-4b7a-aa3c-46dd1de1be4a","status":"retired","revision":5,"created_at":"2026-10-21T02:50:57.203Z","updated_at":"2026-10-21T02:50:57.345Z","created_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030","updated_by":"b6e72b16-1e9d-4a27-9223-f97c5f6a8030"},"meta":{"request_id":"a88ac3f3-df01-45f7-b10b-8a8cb3995dac","api_version":"v1"}}
+curl-exit 0
+schema [{"relname":"agent_lifecycle_events","relrowsecurity":true,"relforcerowsecurity":true,"owner":"postgres"},{"relname":"agent_revisions","relrowsecurity":true,"relforcerowsecurity":true,"owner":"postgres"},{"relname":"agents","relrowsecurity":true,"relforcerowsecurity":true,"owner":"postgres"}]
+policies [{"table_name":"agents","polname":"agents_tenant_isolation","using_expr":"(organization_id = (NULLIF(current_setting('fad.org_id'::text, true), ''::text))::uuid)"},{"table_name":"agent_revisions","polname":"agent_revisions_tenant_isolation","using_expr":"(organization_id = (NULLIF(current_setting('fad.org_id'::text, true), ''::text))::uuid)"},{"table_name":"agent_lifecycle_events","polname":"agent_lifecycle_tenant_isolation","using_expr":"(organization_id = (NULLIF(current_setting('fad.org_id'::text, true), ''::text))::uuid)"}]
+migrations [{"version":"0001_foundation","checksum_sha256":"09fb08e50ca20f3c1f18a32e93c03260f476c52816a976e1754a8b34505dc463"},{"version":"0002_rate_limit","checksum_sha256":"2b8f86066af0b29968268db39ca3dd297677321339b947d46e46613f68811924"},{"version":"20261020_001_agents","checksum_sha256":"96ad57d503b52926c3f83c90b66dbb37a6462bfeb4b1959a495e47a7508ffe12"},{"version":"20261020_002_principal_lock","checksum_sha256":"93a7a7f269ffe076cce814b9157209d3efee11d3f7efa5b791e6d25891118db9"}]
+fad-app-no-context 0
+fad-app-other-tenant 0
+load {"requests":40,"concurrency":1,"statuses":[200],"p50_ms":4.56,"p95_ms":5.5,"p99_ms":10.18,"host":"mini-me.local","platform":"darwin","arch":"arm64","cores":10,"memory_bytes":17179869184}
+pg-dump-exit 0
+dump-copy-exit 0
+restore-container 0
+restore-roles-exit 0
+pg-restore-exit 0
+restored-counts 1,5,0001_foundation 0002_rate_limit 20261020_001_agents 20261020_002_principal_lock
+failed-migration error
+failed-migration-objects {"migrations":null,"agents":null}
+sdk-pack-exit 0
+sdk-install-exit 0
+sdk-exit 0
+{"id":"1a278d89-ba86-4a21-9025-8c0434f3bc93","organization_id":"a8d9c43e-f4e9-475f-a274-c65014cbf9cd","global_id":"urn:fad:agent:a8d9c43e-f4e9-475f-a274-c65014cbf9cd:1a278d89-ba86-4a21-9025-8c0434f3bc93","revision":2,"etag":"\"agent-v2\""}

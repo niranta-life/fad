@@ -12,7 +12,7 @@ sdk-consumer/
 .trivy-cache/
 .code-review-graph/
 plans/fad-slice-1/
-docs/releases/slice-1/
 !docs/releases/slice-0/**/*.log
 !docs/releases/slice-0/coverage/
 !docs/releases/slice-0/coverage/**
+!docs/releases/slice-1/**/*.log

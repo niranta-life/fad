@@ -1,0 +1,5 @@
+failed-migration-threw true
+failed-migration-error error
+failed-migration-objects {"migrations":null,"agents":null}
+failed-migration-database-dropped yes
+failed-migration-result PASS
