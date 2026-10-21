@@ -2,15 +2,16 @@
 
 The Federated Agent Directory (FAD) is the control service for the agents in an organization. An administrator runs the service. A developer calls it from an agent with the TypeScript client `@fad/sdk`.
 
-The service does three things:
+The service does four things:
 
 - It binds every API key to one organization.
 - It registers that organization's agents.
 - It keeps a directory status for each agent: `active`, `suspended`, or `retired`.
+- It records capability versions, HTTPS endpoints, and bindings, and it lists active agents that declare a capability.
 
-Each agent receives a stable id, a global URN of the form `urn:fad:agent:<organization-uuid>:<agent-uuid>`, and a revision. A real change writes an audit row. One organization cannot read or change another organization's agents. The directory records the agent. The agent process does its own work. A status of `active` is a directory fact, and another system still decides whether to call the agent.
+Each agent receives a stable id, a global URN of the form `urn:fad:agent:<organization-uuid>:<agent-uuid>`, and a revision. A real change writes an audit row. One organization cannot read or change another organization's agents. The directory records the agent. The agent process does its own work. A status of `active` is a directory fact, and another system still decides whether to call the agent. A discovery match is the same kind of record: the organization declared a capability and an HTTPS endpoint. Another system still checks that the endpoint answers and still decides whether the caller may invoke the agent.
 
-The repository contains a Node.js HTTP API, a PostgreSQL 16 database, the offline program `fad-admin`, the client `@fad/sdk` 0.3.0, and a container image with a local Docker Compose stack. The HTTP contract is `contracts/openapi.yaml`. The contract version is 1.2.0. The API version in every success and error body is `v1`.
+The repository contains a Node.js HTTP API, a PostgreSQL 16 database, the offline program `fad-admin`, the client `@fad/sdk` 0.4.0, and a container image with a local Docker Compose stack. The HTTP contract is `contracts/openapi.yaml`. The contract version is 1.3.0. The API version in every success and error body is `v1`.
 
 - [Server](#server) is for the administrator who runs the service and issues keys.
 - [Client](#client) is the call reference, with examples.
@@ -99,8 +100,17 @@ Optional `--expires-at` takes a future timestamp. A missing expiry leaves the ke
 | `agents:read` | The running agent | Read one agent, list agents, and walk every page in its organization |
 | `agents:write` | The deploy job, or the agent process when that process registers itself | Register an agent and edit its name, description, or owner |
 | `agents:lifecycle` | An operator tool | Suspend, activate, or retire an agent |
+| `tags:define` | The administrator who creates tag definitions | Create a typed tag definition |
+| `tags:read` | A program that reads or searches tags | Read tag definitions and tags on an agent, and send tag predicates |
+| `tags:write` | The deploy job that labels an agent | Assign or remove a tag on an agent |
+| `tags:governance` | A security administrator | Create or change a governed or restricted tag |
+| `tags:restricted:read` | A program allowed to see restricted tags | Read a restricted tag and use it as a predicate |
+| `capabilities:read` | A program that reads the catalog or discovers agents | Read capability versions and bindings |
+| `capabilities:write` | The administrator who publishes or binds a capability | Publish an immutable capability version, and bind or remove that binding |
+| `endpoints:read` | A program that reads endpoint metadata or discovers agents | Read declared endpoints |
+| `endpoints:write` | The deploy job that declares where an agent is reached | Create, update, disable, or remove an endpoint declaration |
 
-A registrar key needs `organizations:read` and `agents:write`. A running agent that loads its record and lists peers needs `agents:read`. Keep `agents:lifecycle` on the operator tool. Suspending, activating, and retiring are administrator actions.
+A key that already exists does not gain a scope added later. Issue a new key when a program needs one of these names. A registrar key needs `organizations:read` and `agents:write`. A running agent that loads its record and lists peers needs `agents:read`. Keep `agents:lifecycle` on the operator tool. Suspending, activating, and retiring are administrator actions. A program that publishes a capability or binds one needs `capabilities:write`. A program that declares an endpoint needs `endpoints:write`. A program that discovers agents needs `agents:read`, `capabilities:read`, and `endpoints:read`.
 
 Confirm a new key from the workstation:
 
@@ -137,19 +147,21 @@ An administrator creates a typed tag definition. A service assigns that tag to a
 
 Set `FAD_TAGS_ENABLED` to `true` to serve the tag routes. The default is off. The tag routes then answer 404. The agent routes stay the same. The agent record does not gain tag fields. A tag has its own ETag, `tag-vN`.
 
+Creating a definition requires `tags:define`. A governed or restricted definition also requires `tags:governance`. Assigning or removing a tag requires `tags:write`, and a governed tag also requires `tags:governance`. Reading tags requires `tags:read` together with `agents:read` for tags on an agent. Search with tag predicates requires `agents:read` and `tags:read`. A restricted predicate also requires `tags:restricted:read`. The reserved namespaces `security`, `compliance`, and `system` are governed and restricted.
+
 Run the migration job before you enable the flag. To roll back, set the flag to `false` and deploy the previous API image. Do not drop the tag tables.
 
 ### Capabilities and local discovery
 
-Set `FAD_SLICE3_ENABLED` to `true` to serve capability, endpoint, binding, and discovery routes. The default is off. Those routes then answer 404. Agent and tag routes stay the same. An endpoint or binding change does not change the agent ETag or a tag ETag.
+Set `FAD_SLICE3_ENABLED` to the exact string `true` to serve capability, endpoint, binding, and discovery routes. Any other value leaves those routes off. They then answer 404. Agent and tag routes stay the same. An endpoint or binding change does not change the agent ETag or a tag ETag. Run the migration job before you enable the flag. To roll back, set the flag to `false` or deploy the previous API image. Do not drop the new tables.
 
-Publish an immutable capability version with `capabilities:write`. Read the catalog with `capabilities:read`. Declare an HTTPS endpoint with `endpoints:write` and read it with `agents:read` and `endpoints:read`. Bind one published version to one endpoint on the same agent with `capabilities:write`. The endpoint ETag is `endpoint-vN`. The binding ETag is `cap-binding-vN`. Create with `If-None-Match: *`. Update with the current strong `If-Match`. A missing precondition returns status 428. A stale ETag returns status 412.
+`POST /v1/capabilities` publishes one immutable version. Send `capabilities:write`, an idempotency key, a capability id, a semantic version, a display name, and bounded JSON Schema Draft 2020-12 input and output schemas. The server stores a canonical contract digest and `verification` `self_declared`. The same key and the same body replay the original 201. A new key for a version that already exists returns 409. A published version stays as published.
 
-`POST /v1/discovery/agents` requires `agents:read`, `capabilities:read`, and `endpoints:read`. Tag predicates also require `tags:read`, and a restricted predicate requires `tags:restricted:read`. A match includes `verification: self_declared`, `availability: not_checked`, and `invocation_authorization: not_evaluated`. The directory does not probe the declared URL and does not authorize invocation.
+`PUT /v1/agents/<agent-id>/endpoints/<key>` declares where that agent is reached. Send `endpoints:write`. The URL is `https`, with a hostname, and with no username, password, query, fragment, or IP address. Put no credential in the URL or in any other field. The protocol is `a2a`, `mcp`, or `http_json`. The auth scheme is a label: `oauth2`, `mtls`, `api_key`, or `none`. The service stores that label and does not resolve or call the URL. Create with `If-None-Match: *`. The first ETag is `"endpoint-v1"`. A later change sends `If-Match` with the current strong ETag. A missing precondition returns 428. A stale ETag returns 412. An agent has at most 8 live endpoints. Deleting an endpoint that still has a live binding returns 409. Remove the binding first. A later create continues the revision, so the old ETag stays stale. Read an endpoint with `agents:read` and `endpoints:read`.
 
-The contract version is 1.3.0. `@fad/sdk` 0.4.0 adds `capabilities`, `endpoints`, `bindings`, and `discovery` without changing older methods. Run the migration job before you enable the flag. To roll back, set `FAD_SLICE3_ENABLED` to `false` or deploy the previous API image. Do not drop the new tables.
+`PUT /v1/agents/<agent-id>/capabilities/<capability-id>` binds one published version to one endpoint on that same agent. Send `capabilities:write`. The body is `version` and `endpoint_key`. Create with `If-None-Match: *`. The first ETag is `"cap-binding-v1"`. An agent has at most 32 live bindings, and one live binding for each capability id. Read a binding with `agents:read` and `capabilities:read`. Remove an endpoint or a binding with `DELETE`, `If-Match`, and the current ETag.
 
-Creating a definition requires `tags:define`. A governed or restricted definition also requires `tags:governance`. Assigning or removing a tag requires `tags:write`, and a governed tag also requires `tags:governance`. Reading tags requires `tags:read` together with `agents:read` for tags on an agent. Search with tag predicates requires `agents:read` and `tags:read`. A restricted predicate also requires `tags:restricted:read`. The reserved namespaces `security`, `compliance`, and `system` are governed and restricted.
+`POST /v1/discovery/agents` lists active agents in the caller's organization. The caller needs `agents:read`, `capabilities:read`, and `endpoints:read`. The body names an exact capability id, an optional exact version, up to eight tag predicates, and an optional protocol list. A tag predicate also requires `tags:read`. A restricted predicate requires `tags:restricted:read`. Without that scope, a restricted tag and a tag the organization has not defined both return 403, and the body does not include the tag value. Each match includes the agent, the binding, the endpoint, `verification` `self_declared`, `availability` `not_checked`, and `invocation_authorization` `not_evaluated`. A disabled endpoint, a suspended or retired agent, or a tombstoned binding is omitted. The client methods are `capabilities`, `endpoints`, `bindings`, and `discovery`. Older methods keep their arguments and results.
 
 ### Rotate a key and stop a caller
 
@@ -194,7 +206,7 @@ The package builds for ESM and CommonJS and requires Node.js 22 or later. From a
 
 ```sh
 npm pack -w @fad/sdk
-npm install /path/to/fad-sdk-0.3.0.tgz
+npm install /path/to/fad-sdk-0.4.0.tgz
 ```
 
 Create one client for the life of the process. Pass the key through a function so a rotated secret is picked up on the next call. Use `credentialProvider` when you prefer that name. When both are set, `apiKey` is the one that is called.
@@ -356,6 +368,20 @@ The client retries a request at most twice (`maxGetRetries`, maximum 5) when the
 | `agentTags.get(agentId, namespace, key)` | `agents:read` and `tags:read` | `GET /v1/agents/{agentId}/tags/{namespace}/{key}` |
 | `agentTags.put(agentId, namespace, key, body, { idempotencyKey, ifMatch or ifNoneMatch })` | `tags:write` | `PUT /v1/agents/{agentId}/tags/{namespace}/{key}` |
 | `agentTags.delete(agentId, namespace, key, { idempotencyKey, ifMatch })` | `tags:write` | `DELETE /v1/agents/{agentId}/tags/{namespace}/{key}` |
+| `capabilities.publish(body, { idempotencyKey })` | `capabilities:write` | `POST /v1/capabilities` |
+| `capabilities.get(capabilityId, version)` | `capabilities:read` | `GET /v1/capabilities/{capabilityId}/versions/{version}` |
+| `capabilities.list(query)` | `capabilities:read` | `GET /v1/capabilities` |
+| `capabilities.iterate(query)` | `capabilities:read` | `GET /v1/capabilities`, following `next_cursor` |
+| `endpoints.list(agentId)` | `agents:read` and `endpoints:read` | `GET /v1/agents/{agentId}/endpoints` |
+| `endpoints.get(agentId, endpointKey)` | `agents:read` and `endpoints:read` | `GET /v1/agents/{agentId}/endpoints/{endpointKey}` |
+| `endpoints.put(agentId, endpointKey, body, { idempotencyKey, ifMatch or ifNoneMatch })` | `endpoints:write` | `PUT /v1/agents/{agentId}/endpoints/{endpointKey}` |
+| `endpoints.delete(agentId, endpointKey, { idempotencyKey, ifMatch })` | `endpoints:write` | `DELETE /v1/agents/{agentId}/endpoints/{endpointKey}` |
+| `bindings.list(agentId)` | `agents:read` and `capabilities:read` | `GET /v1/agents/{agentId}/capabilities` |
+| `bindings.get(agentId, capabilityId)` | `agents:read` and `capabilities:read` | `GET /v1/agents/{agentId}/capabilities/{capabilityId}` |
+| `bindings.put(agentId, capabilityId, body, { idempotencyKey, ifMatch or ifNoneMatch })` | `capabilities:write` | `PUT /v1/agents/{agentId}/capabilities/{capabilityId}` |
+| `bindings.delete(agentId, capabilityId, { idempotencyKey, ifMatch })` | `capabilities:write` | `DELETE /v1/agents/{agentId}/capabilities/{capabilityId}` |
+| `discovery.query(body)` | `agents:read`, `capabilities:read`, and `endpoints:read` | `POST /v1/discovery/agents` |
+| `discovery.iterate(body)` | `agents:read`, `capabilities:read`, and `endpoints:read` | `POST /v1/discovery/agents`, following `next_cursor` |
 
 ## Use the client in an agent
 
@@ -368,7 +394,7 @@ Ask the administrator for four values and put them in the secret store the agent
 - `FAD_ORGANIZATION_ID`, the organization id you expect that key to return.
 - `FAD_OWNER_PRINCIPAL_ID`, the service principal that owns the agent. You need this only in the process that registers.
 
-Choose the key for the job that process does. A deploy job that registers the agent holds `organizations:read` and `agents:write`. The running agent holds `agents:read` and loads its record, or lists peers, with that key. An operator tool holds `agents:lifecycle`. When the agent process itself registers on startup, that process holds `agents:write`, and lifecycle stays on the operator tool. The agent never runs `fad-admin` and never opens PostgreSQL.
+Choose the key for the job that process does. A deploy job that registers the agent holds `organizations:read` and `agents:write`. The running agent holds `agents:read` and loads its record, or lists peers, with that key. An operator tool holds `agents:lifecycle`. A job that publishes a capability or binds one holds `capabilities:write`. A job that declares an endpoint holds `endpoints:write`. A job that discovers agents holds `agents:read`, `capabilities:read`, and `endpoints:read`. When the agent process itself registers on startup, that process holds `agents:write`, and lifecycle stays on the operator tool. The agent never runs `fad-admin` and never opens PostgreSQL.
 
 On startup, wait until the directory is ready, confirm the organization, register once, and then read the live record. Persist `data.id`. On the next start, skip registration and call `agents.get` with the saved id. Registration is safe to retry with the same body and the same idempotency key for 24 hours. It is not a permanent get-or-create. After the idempotency record expires, repeating it creates a second agent.
 
@@ -422,6 +448,21 @@ for await (const agent of fad.agents.iterate({ status: 'active' })) {
 ```
 
 That list is the organization's directory. The client does not open a connection to those agents. Your agent uses `id`, `global_id`, `name`, `description`, and `status` to decide what to do next.
+
+To find active agents that declare a capability, call `discovery.query` or `discovery.iterate`. Add `tags:read` when the body includes a tag predicate.
+
+```ts
+const matches = await fad.discovery.query({
+  capability: { id: 'finance.invoice.match', version: '1.0.0' },
+  tags: [{ namespace: 'department', key: 'name', operator: 'eq', value: 'finance' }],
+  protocols: ['a2a'],
+});
+for (const match of matches.data) {
+  console.log(match.agent.id, match.endpoint.url, match.availability, match.invocation_authorization);
+}
+```
+
+`availability` is `not_checked`. `invocation_authorization` is `not_evaluated`. The client does not open `match.endpoint.url`.
 
 ## License
 
