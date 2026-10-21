@@ -16,3 +16,4 @@ sdk-consumer/
 !docs/releases/slice-0/coverage/**
 !docs/releases/slice-1/**/*.log
 !docs/releases/slice-2/**/*.log
+!docs/releases/slice-3/**/*.log

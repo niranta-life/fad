@@ -32,6 +32,17 @@ export interface AppConfig {
   tagSearchMaxPredicates: number;
   tagSearchMaxLimit: number;
   tagWriteBodyMaxBytes: number;
+  slice3Enabled: boolean;
+  maxEndpointsPerAgent: number;
+  maxBindingsPerAgent: number;
+  maxDiscoveryLimit: number;
+  discoveryMaxPredicates: number;
+  maxCapabilityListLimit: number;
+  discoveryQueryTimeoutMs: number;
+  capabilityPublishBodyMaxBytes: number;
+  endpointWriteBodyMaxBytes: number;
+  bindingWriteBodyMaxBytes: number;
+  discoveryBodyMaxBytes: number;
 }
 
 function integer(name: string, fallback: number, min: number, max: number, env: NodeJS.ProcessEnv): number {
@@ -144,5 +155,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     tagSearchMaxPredicates: integer('FAD_TAG_SEARCH_MAX_PREDICATES', 8, 1, 8, env),
     tagSearchMaxLimit: integer('FAD_TAG_SEARCH_MAX_LIMIT', 100, 1, 100, env),
     tagWriteBodyMaxBytes: integer('FAD_TAG_WRITE_BODY_MAX_BYTES', 16_384, 1, 16_384, env),
+    slice3Enabled: env.FAD_SLICE3_ENABLED === 'true',
+    maxEndpointsPerAgent: integer('FAD_MAX_ENDPOINTS_PER_AGENT', 8, 1, 8, env),
+    maxBindingsPerAgent: integer('FAD_MAX_BINDINGS_PER_AGENT', 32, 1, 32, env),
+    maxDiscoveryLimit: integer('FAD_MAX_DISCOVERY_LIMIT', 50, 1, 50, env),
+    discoveryMaxPredicates: integer('FAD_DISCOVERY_MAX_PREDICATES', 8, 1, 8, env),
+    maxCapabilityListLimit: integer('FAD_MAX_CAPABILITY_LIST_LIMIT', 100, 1, 100, env),
+    discoveryQueryTimeoutMs: integer('FAD_DISCOVERY_QUERY_TIMEOUT_MS', 1500, 100, 5000, env),
+    capabilityPublishBodyMaxBytes: integer('FAD_CAPABILITY_PUBLISH_BODY_MAX_BYTES', 73_728, 1, 73_728, env),
+    endpointWriteBodyMaxBytes: integer('FAD_ENDPOINT_WRITE_BODY_MAX_BYTES', 4096, 1, 4096, env),
+    bindingWriteBodyMaxBytes: integer('FAD_BINDING_WRITE_BODY_MAX_BYTES', 4096, 1, 4096, env),
+    discoveryBodyMaxBytes: integer('FAD_DISCOVERY_BODY_MAX_BYTES', 16_384, 1, 16_384, env),
   };
 }

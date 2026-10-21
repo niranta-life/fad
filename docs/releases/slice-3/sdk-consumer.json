@@ -1,0 +1,43 @@
+{
+  "ok": true,
+  "hosts": [
+    "127.0.0.1",
+    "127.0.0.1",
+    "127.0.0.1",
+    "127.0.0.1",
+    "127.0.0.1",
+    "127.0.0.1",
+    "127.0.0.1",
+    "127.0.0.1",
+    "127.0.0.1",
+    "127.0.0.1",
+    "127.0.0.1"
+  ],
+  "publish": 201,
+  "discovery": 1,
+  "etag": "\"endpoint-v1\"",
+  "bindingEtag": "\"cap-binding-v1\"",
+  "availability": "not_checked",
+  "authorization": "not_evaluated",
+  "iterated": 2,
+  "aborted": true,
+  "duplicate": 409,
+  "legacyAgent": "6dc0b21b-64fb-43a2-aa83-281f1c0ffef0",
+  "legacyKeys": [
+    "id",
+    "global_id",
+    "organization_id",
+    "name",
+    "description",
+    "owner_principal_id",
+    "status",
+    "revision",
+    "created_at",
+    "updated_at",
+    "created_by",
+    "updated_by"
+  ],
+  "futureProtocol": "future_bus",
+  "retryAttempts": 2,
+  "retrySameKey": true
+}

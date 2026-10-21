@@ -1,0 +1,4 @@
+AUTH-13 owner=postgres bypass=false hidden=0 rls=42501 ddl=42501
+AUTH-16 fk_agent=23503 fk_catalog=23503
+DUR-07 restored_capabilities=51
+image=sha256:dd669a8fdc8a0bde7e959a23aba21bffee3ad661dfe82cf401374bad4046f78b node uid=1000

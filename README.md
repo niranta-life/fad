@@ -139,6 +139,16 @@ Set `FAD_TAGS_ENABLED` to `true` to serve the tag routes. The default is off. Th
 
 Run the migration job before you enable the flag. To roll back, set the flag to `false` and deploy the previous API image. Do not drop the tag tables.
 
+### Capabilities and local discovery
+
+Set `FAD_SLICE3_ENABLED` to `true` to serve capability, endpoint, binding, and discovery routes. The default is off. Those routes then answer 404. Agent and tag routes stay the same. An endpoint or binding change does not change the agent ETag or a tag ETag.
+
+Publish an immutable capability version with `capabilities:write`. Read the catalog with `capabilities:read`. Declare an HTTPS endpoint with `endpoints:write` and read it with `agents:read` and `endpoints:read`. Bind one published version to one endpoint on the same agent with `capabilities:write`. The endpoint ETag is `endpoint-vN`. The binding ETag is `cap-binding-vN`. Create with `If-None-Match: *`. Update with the current strong `If-Match`. A missing precondition returns status 428. A stale ETag returns status 412.
+
+`POST /v1/discovery/agents` requires `agents:read`, `capabilities:read`, and `endpoints:read`. Tag predicates also require `tags:read`, and a restricted predicate requires `tags:restricted:read`. A match includes `verification: self_declared`, `availability: not_checked`, and `invocation_authorization: not_evaluated`. The directory does not probe the declared URL and does not authorize invocation.
+
+The contract version is 1.3.0. `@fad/sdk` 0.4.0 adds `capabilities`, `endpoints`, `bindings`, and `discovery` without changing older methods. Run the migration job before you enable the flag. To roll back, set `FAD_SLICE3_ENABLED` to `false` or deploy the previous API image. Do not drop the new tables.
+
 Creating a definition requires `tags:define`. A governed or restricted definition also requires `tags:governance`. Assigning or removing a tag requires `tags:write`, and a governed tag also requires `tags:governance`. Reading tags requires `tags:read` together with `agents:read` for tags on an agent. Search with tag predicates requires `agents:read` and `tags:read`. A restricted predicate also requires `tags:restricted:read`. The reserved namespaces `security`, `compliance`, and `system` are governed and restricted.
 
 ### Rotate a key and stop a caller

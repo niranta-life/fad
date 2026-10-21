@@ -1,0 +1,7 @@
+old_ready=ready
+old_agent=200
+old_capability=404
+new_ready=ready
+new_capability=200
+capability_rows=1
+image=sha256:dd669a8fdc8a0bde7e959a23aba21bffee3ad661dfe82cf401374bad4046f78b node

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Federated Agent Directory API
-  version: 1.2.0
+  version: 1.3.0
   description: |
     Normative public HTTP contract. Header authentication with X-FAD-API-Key
     is scoped to a single organization and principal. A supplied
@@ -9,7 +9,11 @@ info:
     Health and the current organization are the Slice 0 operations. Agent
     registration and lifecycle are additive Slice 1 operations. Typed tags
     and tag search are additive Slice 2 operations. A deployment serves the
-    tag routes only when typed tags are enabled.
+    tag routes only when typed tags are enabled. Capability versions,
+    endpoint metadata, capability bindings, and local discovery are additive
+    Slice 3 operations. A deployment serves those routes only when Slice 3
+    is enabled. Discovery does not claim that an agent is healthy, trusted,
+    or authorized for invocation.
 servers:
   - url: https://fad.example.internal
 security:
@@ -19,6 +23,10 @@ tags:
   - name: Organizations
   - name: Agents
   - name: Tags
+  - name: Capabilities
+  - name: Endpoints
+  - name: Bindings
+  - name: Discovery
 paths:
   /health/live:
     get:
@@ -588,6 +596,382 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
         '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/capabilities:
+    post:
+      tags: [Capabilities]
+      operationId: publishCapability
+      summary: Publish an immutable capability version
+      description: |
+        Requires capabilities:write. The organization comes from the credential.
+        The version cannot be changed or deleted. verification is self_declared.
+        The same Idempotency-Key and body returns the original 201. A new key
+        for an existing version returns 409.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CapabilityPublish' }
+      responses:
+        '201':
+          description: Version published
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CapabilityResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    get:
+      tags: [Capabilities]
+      operationId: listCapabilities
+      summary: List capability versions in the caller organization
+      description: |
+        Requires capabilities:read. Order is capability id ascending, then
+        version ascending as text, not semantic version order.
+      parameters:
+        - $ref: '#/components/parameters/CapabilityIdFilter'
+        - $ref: '#/components/parameters/CapabilityLimit'
+        - $ref: '#/components/parameters/CapabilityCursor'
+      responses:
+        '200':
+          description: Catalog page
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CapabilityListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/capabilities/{capabilityId}/versions/{version}:
+    parameters:
+      - $ref: '#/components/parameters/CapabilityId'
+      - $ref: '#/components/parameters/CapabilityVersion'
+    get:
+      tags: [Capabilities]
+      operationId: getCapabilityVersion
+      summary: Read one immutable capability version
+      description: Requires capabilities:read. Another organization and a missing version both return 404.
+      responses:
+        '200':
+          description: Capability contract
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CapabilityResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/agents/{agentId}/endpoints:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    get:
+      tags: [Endpoints]
+      operationId: listAgentEndpoints
+      summary: List live endpoint declarations
+      description: Requires agents:read and endpoints:read. Tombstones are omitted. The directory does not contact the URL.
+      responses:
+        '200':
+          description: Live endpoints
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EndpointListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/agents/{agentId}/endpoints/{endpointKey}:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/EndpointKey'
+    get:
+      tags: [Endpoints]
+      operationId: getAgentEndpoint
+      summary: Read one live endpoint
+      description: Requires agents:read and endpoints:read. A missing or tombstoned endpoint returns 404.
+      responses:
+        '200':
+          description: Endpoint declaration
+          headers:
+            ETag: { $ref: '#/components/headers/EndpointETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EndpointResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    put:
+      tags: [Endpoints]
+      operationId: putAgentEndpoint
+      summary: Create or replace endpoint metadata
+      description: |
+        Requires endpoints:write, Idempotency-Key, and exactly one of
+        If-None-Match * or If-Match endpoint-vN. The URL is stored and is not
+        resolved or called. A retired agent returns 409. At most eight live
+        endpoints are allowed.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/EndpointIfMatch'
+        - $ref: '#/components/parameters/EndpointIfNoneMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EndpointPut' }
+      responses:
+        '200':
+          description: Endpoint updated or unchanged
+          headers:
+            ETag: { $ref: '#/components/headers/EndpointETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EndpointResponse' }
+        '201':
+          description: Endpoint created or recreated
+          headers:
+            ETag: { $ref: '#/components/headers/EndpointETag' }
+            Location: { $ref: '#/components/headers/Location' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EndpointResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    delete:
+      tags: [Endpoints]
+      operationId: deleteAgentEndpoint
+      summary: Tombstone an endpoint that has no live binding
+      description: |
+        Requires endpoints:write, Idempotency-Key, and If-Match endpoint-vN.
+        A live binding returns 409. The row stays and the revision increases.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/EndpointIfMatch'
+      responses:
+        '204':
+          description: Endpoint tombstoned
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/agents/{agentId}/capabilities:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    get:
+      tags: [Bindings]
+      operationId: listAgentCapabilityBindings
+      summary: List live capability bindings
+      description: Requires agents:read and capabilities:read. Tombstones are omitted. At most 32 live bindings.
+      responses:
+        '200':
+          description: Live bindings
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BindingListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/agents/{agentId}/capabilities/{capabilityId}:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/CapabilityId'
+    get:
+      tags: [Bindings]
+      operationId: getAgentCapabilityBinding
+      summary: Read one live capability binding
+      description: Requires agents:read and capabilities:read. A missing or tombstoned binding returns 404.
+      responses:
+        '200':
+          description: Binding
+          headers:
+            ETag: { $ref: '#/components/headers/BindingETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BindingResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    put:
+      tags: [Bindings]
+      operationId: putAgentCapabilityBinding
+      summary: Bind one capability version to one endpoint
+      description: |
+        Requires capabilities:write, Idempotency-Key, and exactly one of
+        If-None-Match * or If-Match cap-binding-vN. The version must exist in
+        the caller organization. The endpoint must belong to this agent and
+        be enabled. One live version per capability id.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/BindingIfMatch'
+        - $ref: '#/components/parameters/BindingIfNoneMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BindingPut' }
+      responses:
+        '200':
+          description: Binding updated or unchanged
+          headers:
+            ETag: { $ref: '#/components/headers/BindingETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BindingResponse' }
+        '201':
+          description: Binding created or recreated
+          headers:
+            ETag: { $ref: '#/components/headers/BindingETag' }
+            Location: { $ref: '#/components/headers/Location' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BindingResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    delete:
+      tags: [Bindings]
+      operationId: deleteAgentCapabilityBinding
+      summary: Tombstone a capability binding
+      description: Requires capabilities:write, Idempotency-Key, and If-Match cap-binding-vN. The row stays.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/BindingIfMatch'
+      responses:
+        '204':
+          description: Binding tombstoned
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/discovery/agents:
+    post:
+      tags: [Discovery]
+      operationId: discoverLocalAgents
+      summary: Find active agents in the caller organization
+      description: |
+        Requires agents:read, capabilities:read, and endpoints:read. Tag
+        predicates also require tags:read. A restricted predicate also
+        requires tags:restricted:read. The query stays in the caller
+        organization. The directory does not call declared endpoints.
+        A match is not a health, trust, or invocation decision.
+        Idempotency-Key is ignored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DiscoveryRequest' }
+      responses:
+        '200':
+          description: Local discovery page
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DiscoveryResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
 components:
   securitySchemes:
     FadApiKey:
@@ -657,6 +1041,60 @@ components:
       required: false
       description: Required when deleting a governed tag. 1–500 Unicode code points.
       schema: { type: string, minLength: 1 }
+    CapabilityId:
+      name: capabilityId
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/CapabilityId' }
+    CapabilityVersion:
+      name: version
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/CapabilityVersion' }
+    EndpointKey:
+      name: endpointKey
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/EndpointKey' }
+    BindingIfMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: Strong binding ETag such as "cap-binding-v2". Weak tags and wildcards are rejected.
+      schema: { type: string, pattern: '^"cap-binding-v[1-9][0-9]*"$' }
+    BindingIfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      description: Exactly * when creating a binding. Mutually exclusive with If-Match.
+      schema: { type: string, enum: ['*'] }
+    EndpointIfMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: Strong endpoint ETag such as "endpoint-v2". Weak tags and wildcards are rejected.
+      schema: { type: string, pattern: '^"endpoint-v[1-9][0-9]*"$' }
+    EndpointIfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      description: Exactly * when creating an endpoint. Mutually exclusive with If-Match.
+      schema: { type: string, enum: ['*'] }
+    CapabilityCursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, minLength: 1, maxLength: 4096 }
+    CapabilityLimit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    CapabilityIdFilter:
+      name: id
+      in: query
+      required: false
+      schema: { $ref: '#/components/schemas/CapabilityId' }
   headers:
     RequestId:
       description: Unique server-generated request correlation UUID.
@@ -685,6 +1123,15 @@ components:
     TagAssignmentLocation:
       description: Relative URI of the created tag assignment.
       schema: { type: string }
+    Location:
+      description: Relative URI of the created resource.
+      schema: { type: string }
+    BindingETag:
+      description: Strong ETag for a capability binding. It does not change the agent ETag.
+      schema: { type: string, pattern: '^"cap-binding-v[1-9][0-9]*"$' }
+    EndpointETag:
+      description: Strong ETag for an endpoint. It does not change the agent ETag.
+      schema: { type: string, pattern: '^"endpoint-v[1-9][0-9]*"$' }
   schemas:
     Liveness:
       type: object
@@ -966,6 +1413,215 @@ components:
           maxItems: 64
           items: { $ref: '#/components/schemas/TagAssignment' }
         meta: { $ref: '#/components/schemas/ResponseMeta' }
+    CapabilityId:
+      type: string
+      minLength: 3
+      maxLength: 164
+      pattern: '^[a-z][a-z0-9_-]{0,39}(\.[a-z][a-z0-9_-]{0,39}){1,3}$'
+      description: Two to four lowercase segments separated by dots.
+    CapabilityVersion:
+      type: string
+      maxLength: 32
+      pattern: '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+      description: MAJOR.MINOR.PATCH. Each component is at most 2147483647.
+    EndpointKey:
+      type: string
+      minLength: 1
+      maxLength: 40
+      pattern: '^[a-z][a-z0-9_-]{0,39}$'
+    CapabilityContract:
+      type: object
+      additionalProperties: true
+      description: A self-contained JSON Schema Draft 2020-12 object. $ref and remote schemas are rejected.
+    CapabilityPublish:
+      type: object
+      additionalProperties: false
+      required: [id, version, display_name, input_schema, output_schema]
+      properties:
+        id: { $ref: '#/components/schemas/CapabilityId' }
+        version: { $ref: '#/components/schemas/CapabilityVersion' }
+        display_name: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: string, maxLength: 2000 }
+        input_schema: { $ref: '#/components/schemas/CapabilityContract' }
+        output_schema: { $ref: '#/components/schemas/CapabilityContract' }
+    Capability:
+      type: object
+      additionalProperties: false
+      required: [id, version, organization_id, display_name, description, input_schema, output_schema, contract_sha256, verification, published_by, published_at]
+      properties:
+        id: { $ref: '#/components/schemas/CapabilityId' }
+        version: { $ref: '#/components/schemas/CapabilityVersion' }
+        organization_id: { type: string, format: uuid }
+        display_name: { type: string }
+        description: { type: string }
+        input_schema: { $ref: '#/components/schemas/CapabilityContract' }
+        output_schema: { $ref: '#/components/schemas/CapabilityContract' }
+        contract_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        verification: { type: string, const: self_declared }
+        published_by: { type: string, format: uuid }
+        published_at: { type: string, format: date-time }
+    EndpointProtocol:
+      type: string
+      enum: [a2a, mcp, http_json]
+    EndpointAuthScheme:
+      type: string
+      enum: [oauth2, mtls, api_key, none]
+      description: A declaration of the scheme. It is not a credential.
+    EndpointPut:
+      type: object
+      additionalProperties: false
+      required: [protocol, url, auth_scheme]
+      properties:
+        protocol: { $ref: '#/components/schemas/EndpointProtocol' }
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: Absolute HTTPS URL. No userinfo, query, fragment, credentials, or IP literal.
+        auth_scheme: { $ref: '#/components/schemas/EndpointAuthScheme' }
+        enabled: { type: boolean, default: true }
+    Endpoint:
+      type: object
+      additionalProperties: false
+      required: [agent_id, key, protocol, url, auth_scheme, enabled, revision, verification, created_by, updated_by, created_at, updated_at]
+      properties:
+        agent_id: { type: string, format: uuid }
+        key: { $ref: '#/components/schemas/EndpointKey' }
+        protocol: { $ref: '#/components/schemas/EndpointProtocol' }
+        url: { type: string, format: uri }
+        auth_scheme: { $ref: '#/components/schemas/EndpointAuthScheme' }
+        enabled: { type: boolean }
+        revision: { type: integer, minimum: 1 }
+        verification: { type: string, const: self_declared }
+        created_by: { type: string, format: uuid }
+        updated_by: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    BindingPut:
+      type: object
+      additionalProperties: false
+      required: [version, endpoint_key]
+      properties:
+        version: { $ref: '#/components/schemas/CapabilityVersion' }
+        endpoint_key: { $ref: '#/components/schemas/EndpointKey' }
+    Binding:
+      type: object
+      additionalProperties: false
+      required: [agent_id, capability_id, version, endpoint_key, revision, verification, created_by, updated_by, created_at, updated_at]
+      properties:
+        agent_id: { type: string, format: uuid }
+        capability_id: { $ref: '#/components/schemas/CapabilityId' }
+        version: { $ref: '#/components/schemas/CapabilityVersion' }
+        endpoint_key: { $ref: '#/components/schemas/EndpointKey' }
+        revision: { type: integer, minimum: 1 }
+        verification: { type: string, const: self_declared }
+        created_by: { type: string, format: uuid }
+        updated_by: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    DiscoveryCapability:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id: { $ref: '#/components/schemas/CapabilityId' }
+        version: { $ref: '#/components/schemas/CapabilityVersion' }
+    DiscoveryRequest:
+      type: object
+      additionalProperties: false
+      required: [capability]
+      description: Local query. A match is not invocation authority or liveness.
+      properties:
+        capability: { $ref: '#/components/schemas/DiscoveryCapability' }
+        tags:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items: { $ref: '#/components/schemas/TagPredicate' }
+        protocols:
+          type: array
+          minItems: 1
+          maxItems: 3
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/EndpointProtocol' }
+        limit: { type: integer, minimum: 1, maximum: 50, default: 25 }
+        cursor: { type: string, minLength: 1, maxLength: 4096 }
+    DiscoveryBoundCapability:
+      type: object
+      additionalProperties: false
+      required: [id, version, verification]
+      properties:
+        id: { $ref: '#/components/schemas/CapabilityId' }
+        version: { $ref: '#/components/schemas/CapabilityVersion' }
+        verification: { type: string, const: self_declared }
+    DiscoveryMatch:
+      type: object
+      additionalProperties: false
+      required: [agent, capability, binding, endpoint, invocation_authorization, availability]
+      properties:
+        agent: { $ref: '#/components/schemas/Agent' }
+        capability: { $ref: '#/components/schemas/DiscoveryBoundCapability' }
+        binding: { $ref: '#/components/schemas/Binding' }
+        endpoint: { $ref: '#/components/schemas/Endpoint' }
+        invocation_authorization: { type: string, const: not_evaluated }
+        availability: { type: string, const: not_checked }
+    CapabilityResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Capability' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    EndpointResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Endpoint' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    BindingResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Binding' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    CapabilityListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Capability' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    EndpointListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Endpoint' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    BindingListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Binding' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    DiscoveryResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/DiscoveryMatch' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
   responses:
     HealthUnavailable:
       description: Process is not ready to serve traffic
@@ -1171,4 +1827,26 @@ components:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
           example:
             error: { code: TAG_DEFINITION_EXISTS, message: The tag definition already exists. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    NotFound:
+      description: The resource does not exist in the authenticated organization
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: CAPABILITY_NOT_FOUND, message: Capability not found. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    Conflict:
+      description: The write conflicts with an existing resource or a live reference
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: ALREADY_EXISTS, message: The capability version already exists. }
             meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }

@@ -1,0 +1,70 @@
+[
+  {
+    "step": "A",
+    "orgA": "dc1bae63-b118-42a5-a08b-2b4370c7c8e6",
+    "orgB": "1be483c6-1bb3-4da3-bee7-601cb9566077",
+    "request": "credential issue"
+  },
+  {
+    "step": "B",
+    "status": 201,
+    "tag": 201,
+    "request_id": "61b71576-a9fa-4648-9e55-94d11e7eaff4"
+  },
+  {
+    "step": "C",
+    "status": 201,
+    "hash": "e15ff099f78a9d90dcfc648302cfffc72e66862a149546f592709115ec87de2a",
+    "replay": 201,
+    "conflict": 409
+  },
+  {
+    "step": "D",
+    "status": 201,
+    "etag": "\"endpoint-v1\"",
+    "request_id": "058c6ab0-448a-4f1a-9e3d-7ddea97174e7"
+  },
+  {
+    "step": "E",
+    "status": 201,
+    "etag": "\"cap-binding-v1\""
+  },
+  {
+    "step": "F",
+    "status": 200,
+    "availability": "not_checked",
+    "authorization": "not_evaluated",
+    "request_id": "c4afb9d3-3b37-4a4d-ae57-8a777a772a9c"
+  },
+  {
+    "step": "G",
+    "foreign": 404,
+    "discovery": 200,
+    "count": 0
+  },
+  {
+    "step": "H",
+    "disabled": 200,
+    "enabled": 1,
+    "suspended": 0,
+    "active": 1
+  },
+  {
+    "step": "I",
+    "blocked": 409,
+    "unbound": 204,
+    "removed": 204,
+    "recreated": 5,
+    "discovery": 1
+  },
+  {
+    "step": "J",
+    "note": "adversarial cases run in the matrix on launch 1"
+  },
+  {
+    "step": "K",
+    "ok": true,
+    "publish": 201,
+    "discovery": 1
+  }
+]

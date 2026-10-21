@@ -173,3 +173,143 @@ export interface TagAssignmentListResponse {
   meta: ResponseMeta;
 }
 
+export type CapabilityId = string;
+
+export type CapabilityVersion = string;
+
+export type EndpointKey = string;
+
+export interface CapabilityContract {
+  [key: string]: unknown;
+}
+
+export interface CapabilityPublish {
+  id: CapabilityId;
+  version: CapabilityVersion;
+  display_name: string;
+  description?: string;
+  input_schema: CapabilityContract;
+  output_schema: CapabilityContract;
+}
+
+export interface Capability {
+  id: CapabilityId;
+  version: CapabilityVersion;
+  organization_id: string;
+  display_name: string;
+  description: string;
+  input_schema: CapabilityContract;
+  output_schema: CapabilityContract;
+  contract_sha256: string;
+  verification: "self_declared";
+  published_by: string;
+  published_at: string;
+}
+
+export type EndpointProtocol = "a2a" | "mcp" | "http_json";
+
+export type EndpointAuthScheme = "oauth2" | "mtls" | "api_key" | "none";
+
+export interface EndpointPut {
+  protocol: EndpointProtocol;
+  url: string;
+  auth_scheme: EndpointAuthScheme;
+  enabled?: boolean;
+}
+
+export interface Endpoint {
+  agent_id: string;
+  key: EndpointKey;
+  protocol: EndpointProtocol;
+  url: string;
+  auth_scheme: EndpointAuthScheme;
+  enabled: boolean;
+  revision: number;
+  verification: "self_declared";
+  created_by: string;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BindingPut {
+  version: CapabilityVersion;
+  endpoint_key: EndpointKey;
+}
+
+export interface Binding {
+  agent_id: string;
+  capability_id: CapabilityId;
+  version: CapabilityVersion;
+  endpoint_key: EndpointKey;
+  revision: number;
+  verification: "self_declared";
+  created_by: string;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DiscoveryCapability {
+  id: CapabilityId;
+  version?: CapabilityVersion;
+}
+
+export interface DiscoveryRequest {
+  capability: DiscoveryCapability;
+  tags?: TagPredicate[];
+  protocols?: EndpointProtocol[];
+  limit?: number;
+  cursor?: string;
+}
+
+export interface DiscoveryBoundCapability {
+  id: CapabilityId;
+  version: CapabilityVersion;
+  verification: "self_declared";
+}
+
+export interface DiscoveryMatch {
+  agent: Agent;
+  capability: DiscoveryBoundCapability;
+  binding: Binding;
+  endpoint: Endpoint;
+  invocation_authorization: "not_evaluated";
+  availability: "not_checked";
+}
+
+export interface CapabilityResponse {
+  data: Capability;
+  meta: ResponseMeta;
+}
+
+export interface EndpointResponse {
+  data: Endpoint;
+  meta: ResponseMeta;
+}
+
+export interface BindingResponse {
+  data: Binding;
+  meta: ResponseMeta;
+}
+
+export interface CapabilityListResponse {
+  data: Capability[];
+  meta: PageMeta;
+}
+
+export interface EndpointListResponse {
+  data: Endpoint[];
+  meta: ResponseMeta;
+}
+
+export interface BindingListResponse {
+  data: Binding[];
+  meta: ResponseMeta;
+}
+
+export interface DiscoveryResponse {
+  data: DiscoveryMatch[];
+  meta: PageMeta;
+}
+

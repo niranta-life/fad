@@ -20,6 +20,12 @@ export const ERRORS = {
   TAG_ASSIGNMENT_NOT_FOUND: 'Tag assignment not found.',
   TAG_DEFINITION_EXISTS: 'The tag definition already exists.',
   INVALID_AGENT_STATE: 'The agent status does not allow this tag change.',
+  ALREADY_EXISTS: 'The capability version already exists.',
+  ENDPOINT_IN_USE: 'The endpoint is referenced by an active binding.',
+  CAPABILITY_NOT_FOUND: 'Capability not found.',
+  ENDPOINT_NOT_FOUND: 'Endpoint not found.',
+  BINDING_NOT_FOUND: 'Binding not found.',
+  INVALID_CURSOR: 'Cursor is invalid.',
 } as const;
 
 export type ErrorCode = keyof typeof ERRORS;

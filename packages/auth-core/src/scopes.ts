@@ -9,6 +9,10 @@ export const KNOWN_SCOPES = [
   'tags:write',
   'tags:governance',
   'tags:restricted:read',
+  'capabilities:read',
+  'capabilities:write',
+  'endpoints:read',
+  'endpoints:write',
 ] as const;
 
 export type KnownScope = (typeof KNOWN_SCOPES)[number];

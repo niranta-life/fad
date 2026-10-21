@@ -8,7 +8,7 @@ const publishedPath = new URL('../contracts/openapi.yaml', import.meta.url);
 const packagePath = new URL('../plans/fad-slice-0/contracts/openapi.yaml', import.meta.url);
 const slice1Path = new URL('../docs/releases/slice-1/contract-openapi.yaml', import.meta.url);
 const SLICE0_SHA256 = 'bb5a6dc96ae93fb42ed6b69af1770cd435bba43809c8942b0702d9a748beb4cc';
-const PARENT_COMMIT = '566bf826993bb7d783de6ea080bc0f4a9bc0d139';
+const PARENT_COMMIT = '400c531d98685f8c93481ed3e527498c7b9d6fb3';
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head'];
 const AGENT_OPERATIONS = [
@@ -19,6 +19,20 @@ const AGENT_OPERATIONS = [
   ['post', '/v1/agents/{agentId}/suspend'],
   ['post', '/v1/agents/{agentId}/activate'],
   ['post', '/v1/agents/{agentId}/retire'],
+];
+const SLICE3_OPERATIONS = [
+  ['post', '/v1/capabilities'],
+  ['get', '/v1/capabilities'],
+  ['get', '/v1/capabilities/{capabilityId}/versions/{version}'],
+  ['get', '/v1/agents/{agentId}/endpoints'],
+  ['get', '/v1/agents/{agentId}/endpoints/{endpointKey}'],
+  ['put', '/v1/agents/{agentId}/endpoints/{endpointKey}'],
+  ['delete', '/v1/agents/{agentId}/endpoints/{endpointKey}'],
+  ['get', '/v1/agents/{agentId}/capabilities'],
+  ['get', '/v1/agents/{agentId}/capabilities/{capabilityId}'],
+  ['put', '/v1/agents/{agentId}/capabilities/{capabilityId}'],
+  ['delete', '/v1/agents/{agentId}/capabilities/{capabilityId}'],
+  ['post', '/v1/discovery/agents'],
 ];
 const TAG_OPERATIONS = [
   ['post', '/v1/tag-definitions'],
@@ -145,9 +159,15 @@ for (const path of Object.keys(published.doc.paths ?? {}).sort()) {
   }
 }
 const expectedNew = TAG_OPERATIONS.map(([method, path]) => `${method} ${path}`).sort();
+const expectedSlice3 = SLICE3_OPERATIONS.map(([method, path]) => `${method} ${path}`).sort();
 const parentNewSorted = [...parentNew].sort();
-if (!same(parentNewSorted, expectedNew)) {
-  breaking.push(`parent new operations are not exactly the eight tag routes: ${parentNew.join(', ')}`);
+if (!same(parentNewSorted, expectedSlice3)) {
+  breaking.push(`parent new operations are not exactly the slice 3 routes: ${parentNew.join(', ')}`);
+}
+const slice3Present = [];
+for (const [method, path] of SLICE3_OPERATIONS) {
+  if (published.doc.paths?.[path]?.[method] == null) breaking.push(`missing ${method} ${path}`);
+  else slice3Present.push(`${method} ${path}`);
 }
 for (const key of ['openapi', 'servers', 'security']) {
   if (!same(parentDoc[key], published.doc[key])) breaking.push(`changed parent ${key}`);
@@ -180,10 +200,12 @@ const report = {
   parent_preexisting_deep_equal: parentPreexistingDeepEqual,
   parent_new_operations: parentNewSorted,
   parent_new_operations_are_only_tag_routes: same(parentNewSorted, expectedNew),
+  parent_new_operations_are_only_slice3_routes: same(parentNewSorted, expectedSlice3),
   document_changes: documentChanges,
   preserved_operations: preserved,
   slice1_operations: slice1Present,
   added_operations: added,
+  slice3_operations: slice3Present,
   breaking,
 };
 console.log(JSON.stringify(report, null, 2));

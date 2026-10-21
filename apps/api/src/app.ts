@@ -3,9 +3,10 @@ import { randomUUID } from 'node:crypto';
 import Fastify, { LogController, type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { redactText } from '@fad/auth-core';
 import { contract, errorEnvelope, successEnvelope, type ErrorCode } from '@fad/contract';
-import { TAG_MIGRATION_VERSION, cleanupRateLimits, consumeRateLimit, isDependencyError, rateLimitBucket, readMigrationFiles } from '@fad/db';
+import { SLICE3_MIGRATION_VERSION, TAG_MIGRATION_VERSION, cleanupRateLimits, consumeRateLimit, isDependencyError, rateLimitBucket, readMigrationFiles } from '@fad/db';
 import type { Pool } from 'pg';
 import { registerAgentRoutes } from './agent-routes.js';
+import { registerSlice3Routes } from './slice3-routes.js';
 import { registerTagRoutes } from './tag-routes.js';
 import { resolveCurrentOrganization } from './auth.js';
 import type { AppConfig } from './config.js';
@@ -14,12 +15,18 @@ const PATHS = new Set(['/health/live', '/health/ready', '/v1/organizations/curre
 const AGENT_PATH = /^\/v1\/agents\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?:\/(?:suspend|activate|retire))?$/i;
 const TAG_DEFINITION_PATH = /^\/v1\/tag-definitions\/[a-z][a-z0-9_-]{0,39}\/[a-z][a-z0-9_-]{0,39}$/;
 const AGENT_TAGS_PATH = /^\/v1\/agents\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/tags(?:\/[a-z][a-z0-9_-]{0,39}\/[a-z][a-z0-9_-]{0,39})?$/i;
+const CAPABILITY_VERSION_PATH = /^\/v1\/capabilities\/[^/]+\/versions\/[^/]+$/;
+const AGENT_ENDPOINT_PATH = /^\/v1\/agents\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/endpoints(?:\/[^/]+)?$/i;
+const AGENT_BINDING_PATH = /^\/v1\/agents\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/capabilities(?:\/[^/]+)?$/i;
 
-function knownPath(path: string, tagsEnabled: boolean): boolean {
+function knownPath(path: string, tagsEnabled: boolean, slice3Enabled: boolean): boolean {
   if (PATHS.has(path) || AGENT_PATH.test(path)) return true;
-  if (!tagsEnabled) return false;
-  if (path === '/v1/tag-definitions' || path === '/v1/agents/search') return true;
-  return TAG_DEFINITION_PATH.test(path) || AGENT_TAGS_PATH.test(path);
+  if (tagsEnabled && (path === '/v1/tag-definitions' || path === '/v1/agents/search' || TAG_DEFINITION_PATH.test(path) || AGENT_TAGS_PATH.test(path))) {
+    return true;
+  }
+  if (!slice3Enabled) return false;
+  if (path === '/v1/capabilities' || path === '/v1/discovery/agents') return true;
+  return CAPABILITY_VERSION_PATH.test(path) || AGENT_ENDPOINT_PATH.test(path) || AGENT_BINDING_PATH.test(path);
 }
 
 export interface AppHandle {
@@ -120,6 +127,10 @@ export async function buildApp(options: {
       sendError(reply, String(request.id), 405, 'METHOD_NOT_ALLOWED');
       return reply;
     }
+    if (config.slice3Enabled && path === '/v1/discovery/agents' && request.method !== 'POST') {
+      sendError(reply, String(request.id), 405, 'METHOD_NOT_ALLOWED');
+      return reply;
+    }
     return undefined;
   });
 
@@ -172,7 +183,7 @@ export async function buildApp(options: {
   app.setNotFoundHandler((request, reply) => {
     const path = request.url.split('?')[0] ?? '';
     const requestId = String(request.id);
-    if (knownPath(path, config.tagsEnabled)) return sendError(reply, requestId, 405, 'METHOD_NOT_ALLOWED');
+    if (knownPath(path, config.tagsEnabled, config.slice3Enabled)) return sendError(reply, requestId, 405, 'METHOD_NOT_ALLOWED');
     return sendError(reply, requestId, 404, 'NOT_FOUND');
   });
 
@@ -192,6 +203,15 @@ export async function buildApp(options: {
           [TAG_MIGRATION_VERSION],
         );
         if ((tagSchema.rowCount ?? 0) !== 1) {
+          return send(reply, requestId, 503, { status: 'not_ready' }, 'HealthUnavailable', 'no-store');
+        }
+      }
+      if (config.slice3Enabled) {
+        const slice3Schema = await pool.query(
+          'SELECT 1 FROM schema_migrations WHERE version = $1',
+          [SLICE3_MIGRATION_VERSION],
+        );
+        if ((slice3Schema.rowCount ?? 0) !== 1) {
           return send(reply, requestId, 503, { status: 'not_ready' }, 'HealthUnavailable', 'no-store');
         }
       }
@@ -244,6 +264,17 @@ export async function buildApp(options: {
 
   if (config.tagsEnabled) {
     registerTagRoutes(app, {
+      pool,
+      config,
+      send,
+      sendError,
+      limitRequest,
+      migrationsMatch,
+    });
+  }
+
+  if (config.slice3Enabled) {
+    registerSlice3Routes(app, {
       pool,
       config,
       send,

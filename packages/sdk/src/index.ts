@@ -169,6 +169,121 @@ export interface AgentSearchInput {
   cursor?: string;
 }
 
+export interface CapabilityPublish {
+  id: string;
+  version: string;
+  display_name: string;
+  description?: string;
+  input_schema: Record<string, unknown>;
+  output_schema: Record<string, unknown>;
+}
+
+export interface Capability {
+  id: string;
+  version: string;
+  organization_id: string;
+  display_name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+  output_schema: Record<string, unknown>;
+  contract_sha256: string;
+  verification: string;
+  published_by: string;
+  published_at: string;
+}
+
+export interface CapabilityResult extends FadResponse<Capability> {
+  location?: string;
+}
+
+export interface CapabilityPage {
+  data: Capability[];
+  meta: { request_id: string; api_version: 'v1'; limit: number; next_cursor: string | null };
+}
+
+export interface CapabilityListQuery {
+  id?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface EndpointDeclaration {
+  agent_id: string;
+  key: string;
+  protocol: string;
+  url: string;
+  auth_scheme: string;
+  enabled: boolean;
+  revision: number;
+  verification: string;
+  created_by: string;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EndpointPut {
+  protocol: string;
+  url: string;
+  auth_scheme: string;
+  enabled?: boolean;
+}
+
+export interface EndpointResult extends FadResponse<EndpointDeclaration> {
+  etag: string;
+  location?: string;
+}
+
+export interface Binding {
+  agent_id: string;
+  capability_id: string;
+  version: string;
+  endpoint_key: string;
+  revision: number;
+  verification: string;
+  created_by: string;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BindingPut {
+  version: string;
+  endpoint_key: string;
+}
+
+export interface BindingResult extends FadResponse<Binding> {
+  etag: string;
+  location?: string;
+}
+
+export interface ConditionalWriteOptions extends IdempotentOptions {
+  ifMatch?: string;
+  ifNoneMatch?: string;
+}
+
+export interface DiscoveryQuery {
+  capability: { id: string; version?: string };
+  tags?: SearchPredicate[];
+  protocols?: string[];
+  limit?: number;
+  cursor?: string;
+}
+
+export interface DiscoveryMatch {
+  agent: Agent;
+  capability: { id: string; version: string; verification: string };
+  binding: Binding;
+  endpoint: EndpointDeclaration;
+  invocation_authorization: string;
+  availability: string;
+}
+
+export interface DiscoveryPage {
+  data: DiscoveryMatch[];
+  meta: { request_id: string; api_version: 'v1'; limit: number; next_cursor: string | null };
+}
+
 interface IdempotentOptions extends CallOptions {
   idempotencyKey: string;
 }
@@ -317,7 +432,7 @@ export class FadClient {
     }
     this.maxRetryAfterMs = options.maxRetryAfterMs ?? DEFAULT_RETRY_AFTER_CAP_MS;
     const suffix = options.userAgentSuffix ? ` ${options.userAgentSuffix}` : '';
-    this.userAgent = `@fad/sdk/0.3.0${suffix}`;
+    this.userAgent = `@fad/sdk/0.4.0${suffix}`;
     this.now = options.now ?? Date.now;
     this.random = options.random ?? Math.random;
     this.sleep = options.sleep ?? delay;
@@ -371,6 +486,45 @@ export class FadClient {
       this.tagPut(agentId, namespace, key, body, options),
     delete: (agentId: string, namespace: string, key: string, options: TagDeleteOptions): Promise<{ requestId?: string }> =>
       this.tagDelete(agentId, namespace, key, options),
+  };
+
+  readonly capabilities = {
+    publish: (body: CapabilityPublish, options: IdempotentOptions): Promise<CapabilityResult> =>
+      this.capabilityPublish(body, options),
+    get: (capabilityId: string, version: string, options?: CallOptions): Promise<FadResponse<Capability>> =>
+      this.capabilityGet(capabilityId, version, options),
+    list: (query: CapabilityListQuery = {}, options?: CallOptions): Promise<CapabilityPage> =>
+      this.capabilityList(query, options),
+    iterate: (query: CapabilityListQuery = {}, options?: CallOptions): AsyncGenerator<Capability> =>
+      this.iterateCapabilities(query, options),
+  };
+
+  readonly endpoints = {
+    list: (agentId: string, options?: CallOptions): Promise<FadResponse<EndpointDeclaration[]>> =>
+      this.endpointList(agentId, options),
+    get: (agentId: string, endpointKey: string, options?: CallOptions): Promise<EndpointResult> =>
+      this.endpointGet(agentId, endpointKey, options),
+    put: (agentId: string, endpointKey: string, body: EndpointPut, options: ConditionalWriteOptions): Promise<EndpointResult> =>
+      this.endpointPut(agentId, endpointKey, body, options),
+    delete: (agentId: string, endpointKey: string, options: ConditionalWriteOptions): Promise<{ requestId?: string }> =>
+      this.endpointDelete(agentId, endpointKey, options),
+  };
+
+  readonly bindings = {
+    list: (agentId: string, options?: CallOptions): Promise<FadResponse<Binding[]>> =>
+      this.bindingList(agentId, options),
+    get: (agentId: string, capabilityId: string, options?: CallOptions): Promise<BindingResult> =>
+      this.bindingGet(agentId, capabilityId, options),
+    put: (agentId: string, capabilityId: string, body: BindingPut, options: ConditionalWriteOptions): Promise<BindingResult> =>
+      this.bindingPut(agentId, capabilityId, body, options),
+    delete: (agentId: string, capabilityId: string, options: ConditionalWriteOptions): Promise<{ requestId?: string }> =>
+      this.bindingDelete(agentId, capabilityId, options),
+  };
+
+  readonly discovery = {
+    query: (body: DiscoveryQuery, options?: CallOptions): Promise<DiscoveryPage> => this.discoveryQuery(body, options),
+    iterate: (body: DiscoveryQuery, options?: CallOptions): AsyncGenerator<DiscoveryMatch> =>
+      this.iterateDiscovery(body, options),
   };
 
   private async healthCall<T extends { status: string }>(
@@ -814,6 +968,191 @@ export class FadClient {
       return response;
     }
   }
+
+  private async capabilityPublish(body: CapabilityPublish, options: IdempotentOptions): Promise<CapabilityResult> {
+    requireKey(options.idempotencyKey);
+    const key = await this.resolveKey();
+    const response = await this.sendJson('/v1/capabilities', 'POST', body, { 'Idempotency-Key': options.idempotencyKey }, options.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 201 && isCapabilityResponse(parsed)) {
+      const location = response.headers.get('location') ?? undefined;
+      return location ? { ...parsed, location } : parsed;
+    }
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async capabilityGet(capabilityId: string, version: string, options?: CallOptions): Promise<FadResponse<Capability>> {
+    const key = await this.resolveKey();
+    const path = `/v1/capabilities/${encodeURIComponent(capabilityId)}/versions/${encodeURIComponent(version)}`;
+    const response = await this.send(path, true, options?.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isCapabilityResponse(parsed)) return parsed;
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async capabilityList(query: CapabilityListQuery, options?: CallOptions): Promise<CapabilityPage> {
+    const params = new URLSearchParams();
+    if (query.id !== undefined) params.set('id', query.id);
+    if (query.limit !== undefined) params.set('limit', String(query.limit));
+    if (query.cursor !== undefined) params.set('cursor', query.cursor);
+    const suffix = params.size > 0 ? `?${params.toString()}` : '';
+    const key = await this.resolveKey();
+    const response = await this.send(`/v1/capabilities${suffix}`, true, options?.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isCapabilityPage(parsed)) return parsed;
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async *iterateCapabilities(query: CapabilityListQuery, options?: CallOptions): AsyncGenerator<Capability> {
+    let cursor = query.cursor;
+    for (;;) {
+      const page = await this.capabilityList({ ...query, cursor }, options);
+      for (const item of page.data) yield item;
+      const next = page.meta.next_cursor;
+      if (next === null || next === cursor) return;
+      cursor = next;
+    }
+  }
+
+  private async endpointList(agentId: string, options?: CallOptions): Promise<FadResponse<EndpointDeclaration[]>> {
+    const key = await this.resolveKey();
+    const response = await this.send(`/v1/agents/${encodeURIComponent(agentId)}/endpoints`, true, options?.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isRecord(parsed) && Array.isArray(parsed.data) && parsed.data.every(isEndpoint) && isMeta(parsed.meta)) {
+      return parsed as unknown as FadResponse<EndpointDeclaration[]>;
+    }
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async endpointGet(agentId: string, endpointKey: string, options?: CallOptions): Promise<EndpointResult> {
+    const key = await this.resolveKey();
+    const response = await this.send(`/v1/agents/${encodeURIComponent(agentId)}/endpoints/${encodeURIComponent(endpointKey)}`, true, options?.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isEndpointResponse(parsed)) return withResourceEtag(response, parsed);
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async endpointPut(agentId: string, endpointKey: string, body: EndpointPut, options: ConditionalWriteOptions): Promise<EndpointResult> {
+    requireKey(options.idempotencyKey);
+    const key = await this.resolveKey();
+    const response = await this.sendJson(
+      `/v1/agents/${encodeURIComponent(agentId)}/endpoints/${encodeURIComponent(endpointKey)}`,
+      'PUT',
+      body,
+      conditionalHeaders(options),
+      options.signal,
+      key,
+    );
+    const parsed = await readJson(response, key);
+    if ((response.status === 200 || response.status === 201) && isEndpointResponse(parsed)) {
+      const result = withResourceEtag(response, parsed);
+      const location = response.headers.get('location') ?? undefined;
+      return location ? { ...result, location } : result;
+    }
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async endpointDelete(agentId: string, endpointKey: string, options: ConditionalWriteOptions): Promise<{ requestId?: string }> {
+    requireKey(options.idempotencyKey);
+    const key = await this.resolveKey();
+    const response = await this.sendNoBody(
+      `/v1/agents/${encodeURIComponent(agentId)}/endpoints/${encodeURIComponent(endpointKey)}`,
+      'DELETE',
+      conditionalHeaders(options),
+      options.signal,
+      key,
+    );
+    if (response.status === 204) return { requestId: headerRequestId(response) };
+    const parsed = await readJson(response, key);
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async bindingList(agentId: string, options?: CallOptions): Promise<FadResponse<Binding[]>> {
+    const key = await this.resolveKey();
+    const response = await this.send(`/v1/agents/${encodeURIComponent(agentId)}/capabilities`, true, options?.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isRecord(parsed) && Array.isArray(parsed.data) && parsed.data.every(isBinding) && isMeta(parsed.meta)) {
+      return parsed as unknown as FadResponse<Binding[]>;
+    }
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async bindingGet(agentId: string, capabilityId: string, options?: CallOptions): Promise<BindingResult> {
+    const key = await this.resolveKey();
+    const response = await this.send(`/v1/agents/${encodeURIComponent(agentId)}/capabilities/${encodeURIComponent(capabilityId)}`, true, options?.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isBindingResponse(parsed)) return withResourceEtag(response, parsed);
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async bindingPut(agentId: string, capabilityId: string, body: BindingPut, options: ConditionalWriteOptions): Promise<BindingResult> {
+    requireKey(options.idempotencyKey);
+    const key = await this.resolveKey();
+    const response = await this.sendJson(
+      `/v1/agents/${encodeURIComponent(agentId)}/capabilities/${encodeURIComponent(capabilityId)}`,
+      'PUT',
+      body,
+      conditionalHeaders(options),
+      options.signal,
+      key,
+    );
+    const parsed = await readJson(response, key);
+    if ((response.status === 200 || response.status === 201) && isBindingResponse(parsed)) {
+      const result = withResourceEtag(response, parsed);
+      const location = response.headers.get('location') ?? undefined;
+      return location ? { ...result, location } : result;
+    }
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async bindingDelete(agentId: string, capabilityId: string, options: ConditionalWriteOptions): Promise<{ requestId?: string }> {
+    requireKey(options.idempotencyKey);
+    const key = await this.resolveKey();
+    const response = await this.sendNoBody(
+      `/v1/agents/${encodeURIComponent(agentId)}/capabilities/${encodeURIComponent(capabilityId)}`,
+      'DELETE',
+      conditionalHeaders(options),
+      options.signal,
+      key,
+    );
+    if (response.status === 204) return { requestId: headerRequestId(response) };
+    const parsed = await readJson(response, key);
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async discoveryQuery(body: DiscoveryQuery, options?: CallOptions): Promise<DiscoveryPage> {
+    const key = await this.resolveKey();
+    const response = await this.sendJson('/v1/discovery/agents', 'POST', body, {}, options?.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isDiscoveryPage(parsed)) return parsed;
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async *iterateDiscovery(body: DiscoveryQuery, options?: CallOptions): AsyncGenerator<DiscoveryMatch> {
+    let cursor = body.cursor;
+    for (;;) {
+      const page = await this.discoveryQuery({ ...body, cursor }, options);
+      for (const item of page.data) yield item;
+      const next = page.meta.next_cursor;
+      if (next === null || next === cursor) return;
+      cursor = next;
+    }
+  }
+}
+
+function conditionalHeaders(options: ConditionalWriteOptions): Record<string, string> {
+  const headers: Record<string, string> = { 'Idempotency-Key': options.idempotencyKey };
+  if (options.ifMatch !== undefined) headers['If-Match'] = options.ifMatch;
+  if (options.ifNoneMatch !== undefined) headers['If-None-Match'] = options.ifNoneMatch;
+  return headers;
+}
+
+function withResourceEtag<T>(response: Response, body: FadResponse<T>): FadResponse<T> & { etag: string } {
+  const etag = response.headers.get('etag');
+  if (!etag) {
+    throw new FadApiError(response.status, 'INVALID_RESPONSE', 'ETag is missing', headerRequestId(response));
+  }
+  return { ...body, etag };
 }
 
 async function readJson(response: Response, secret: string): Promise<unknown> {
@@ -972,4 +1311,91 @@ function withTagEtag(response: Response, parsed: FadResponse<AgentTag>): AgentTa
     throw new FadApiError(response.status, 'INVALID_RESPONSE', 'Response did not include a strong ETag', headerRequestId(response));
   }
   return { ...parsed, etag };
+}
+
+function isMeta(value: unknown): value is { request_id: string; api_version: 'v1'; [key: string]: unknown } {
+  return isRecord(value) && typeof value.request_id === 'string' && value.api_version === 'v1';
+}
+
+function isPageMeta(value: unknown): value is { request_id: string; api_version: 'v1'; limit: number; next_cursor: string | null } {
+  if (!isMeta(value)) return false;
+  const next = value.next_cursor;
+  return typeof value.limit === 'number' && (typeof next === 'string' || next === null);
+}
+
+function isCapability(value: unknown): value is Capability {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string'
+    && typeof value.version === 'string'
+    && typeof value.organization_id === 'string'
+    && typeof value.display_name === 'string'
+    && typeof value.description === 'string'
+    && isRecord(value.input_schema)
+    && isRecord(value.output_schema)
+    && typeof value.contract_sha256 === 'string'
+    && typeof value.verification === 'string'
+    && typeof value.published_by === 'string'
+    && typeof value.published_at === 'string';
+}
+
+function isCapabilityResponse(value: unknown): value is FadResponse<Capability> {
+  return isRecord(value) && isCapability(value.data) && isMeta(value.meta);
+}
+
+function isCapabilityPage(value: unknown): value is CapabilityPage {
+  return isRecord(value) && Array.isArray(value.data) && value.data.every(isCapability) && isPageMeta(value.meta);
+}
+
+function isEndpoint(value: unknown): value is EndpointDeclaration {
+  if (!isRecord(value)) return false;
+  return typeof value.agent_id === 'string'
+    && typeof value.key === 'string'
+    && typeof value.protocol === 'string'
+    && typeof value.url === 'string'
+    && typeof value.auth_scheme === 'string'
+    && typeof value.enabled === 'boolean'
+    && typeof value.revision === 'number'
+    && typeof value.verification === 'string'
+    && typeof value.created_by === 'string'
+    && typeof value.updated_by === 'string'
+    && typeof value.created_at === 'string'
+    && typeof value.updated_at === 'string';
+}
+
+function isEndpointResponse(value: unknown): value is FadResponse<EndpointDeclaration> {
+  return isRecord(value) && isEndpoint(value.data) && isMeta(value.meta);
+}
+
+function isBinding(value: unknown): value is Binding {
+  if (!isRecord(value)) return false;
+  return typeof value.agent_id === 'string'
+    && typeof value.capability_id === 'string'
+    && typeof value.version === 'string'
+    && typeof value.endpoint_key === 'string'
+    && typeof value.revision === 'number'
+    && typeof value.verification === 'string'
+    && typeof value.created_by === 'string'
+    && typeof value.updated_by === 'string'
+    && typeof value.created_at === 'string'
+    && typeof value.updated_at === 'string';
+}
+
+function isBindingResponse(value: unknown): value is FadResponse<Binding> {
+  return isRecord(value) && isBinding(value.data) && isMeta(value.meta);
+}
+
+function isDiscoveryMatch(value: unknown): value is DiscoveryMatch {
+  if (!isRecord(value) || !isRecord(value.capability)) return false;
+  return isAgent(value.agent)
+    && typeof value.capability.id === 'string'
+    && typeof value.capability.version === 'string'
+    && typeof value.capability.verification === 'string'
+    && isBinding(value.binding)
+    && isEndpoint(value.endpoint)
+    && typeof value.invocation_authorization === 'string'
+    && typeof value.availability === 'string';
+}
+
+function isDiscoveryPage(value: unknown): value is DiscoveryPage {
+  return isRecord(value) && Array.isArray(value.data) && value.data.every(isDiscoveryMatch) && isPageMeta(value.meta);
 }
