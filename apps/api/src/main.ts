@@ -1,5 +1,5 @@
 import { createPool, isDependencyError } from '@fad/db';
-import { buildApp, assertRuntimeRole, migrationsMatch } from './app.js';
+import { assertMcpBindingPrivileges, assertRuntimeRole, buildApp, migrationsMatch } from './app.js';
 import { ConfigError, loadConfig } from './config.js';
 
 export async function start(): Promise<void> {
@@ -23,6 +23,12 @@ export async function start(): Promise<void> {
     }
     const ready = await migrationsMatch(pool, config.migrationsDir);
     if (!ready) throw new ConfigError('schema migration is missing or incompatible');
+    try {
+      await assertMcpBindingPrivileges(pool);
+    } catch (err) {
+      if (err instanceof Error && !isDependencyError(err)) throw new ConfigError(err.message);
+      throw err;
+    }
   } catch (err) {
     await pool.end().catch(() => undefined);
     if (isDependencyError(err)) throw new ConfigError('Database is unavailable');

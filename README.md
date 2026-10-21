@@ -11,7 +11,7 @@ The service does four things:
 
 Each agent receives a stable id, a global URN of the form `urn:fad:agent:<organization-uuid>:<agent-uuid>`, and a revision. A real change writes an audit row. One organization cannot read or change another organization's agents. The directory records the agent. The agent process does its own work. A status of `active` is a directory fact, and another system still decides whether to call the agent. A discovery match is the same kind of record: the organization declared a capability and an HTTPS endpoint. Another system still checks that the endpoint answers and still decides whether the caller may invoke the agent.
 
-The repository contains a Node.js HTTP API, a PostgreSQL 16 database, the offline program `fad-admin`, the client `@fad/sdk` 0.4.0, and a container image with a local Docker Compose stack. The HTTP contract is `contracts/openapi.yaml`. The contract version is 1.3.0. The API version in every success and error body is `v1`.
+The repository contains a Node.js HTTP API, a PostgreSQL 16 database, the offline program `fad-admin`, the client `@fad/sdk` 0.4.0, the optional client `@fad/mcp-client` 0.1.0, and a container image with a local Docker Compose stack. The HTTP contract is `contracts/openapi.yaml`. The contract version is 1.4.0. The API version in every success and error body is `v1`.
 
 - [Server](#server) is for the administrator who runs the service and issues keys.
 - [Client](#client) is the call reference, with examples.
@@ -162,6 +162,23 @@ Set `FAD_SLICE3_ENABLED` to the exact string `true` to serve capability, endpoin
 `PUT /v1/agents/<agent-id>/capabilities/<capability-id>` binds one published version to one endpoint on that same agent. Send `capabilities:write`. The body is `version` and `endpoint_key`. Create with `If-None-Match: *`. The first ETag is `"cap-binding-v1"`. An agent has at most 32 live bindings, and one live binding for each capability id. Read a binding with `agents:read` and `capabilities:read`. Remove an endpoint or a binding with `DELETE`, `If-Match`, and the current ETag.
 
 `POST /v1/discovery/agents` lists active agents in the caller's organization. The caller needs `agents:read`, `capabilities:read`, and `endpoints:read`. The body names an exact capability id, an optional exact version, up to eight tag predicates, and an optional protocol list. A tag predicate also requires `tags:read`. A restricted predicate requires `tags:restricted:read`. Without that scope, a restricted tag and a tag the organization has not defined both return 403, and the body does not include the tag value. Each match includes the agent, the binding, the endpoint, `verification` `self_declared`, `availability` `not_checked`, and `invocation_authorization` `not_evaluated`. A disabled endpoint, a suspended or retired agent, or a tombstoned binding is omitted. The client methods are `capabilities`, `endpoints`, `bindings`, and `discovery`. Older methods keep their arguments and results.
+
+### MCP
+
+Set `FAD_MCP_ENABLED` to the exact string `true` to serve `POST /mcp`. Any other value leaves MCP off. `POST /mcp` then answers 404. `/v1` stays the same and still uses `X-FAD-API-Key`. MCP accepts only `Authorization: Bearer`. The operator sets `FAD_MCP_RESOURCE_URI`, `FAD_MCP_EXPECTED_AUDIENCE` to that same URI, `FAD_MCP_AUTH_ISSUERS`, and `FAD_HTTP_ALLOWED_HOSTS`. The service does not issue tokens. Bind a principal offline, then disable that binding to stop MCP access. The runtime database role cannot insert a binding. A disabled binding does not revoke the principal's API key.
+
+```sh
+npm run fad-admin -- mcp bind \
+  --organization-id <organization-uuid> \
+  --principal-id <principal-uuid> \
+  --issuer https://issuer.example \
+  --subject <oauth-subject> \
+  --client-id <oauth-client-id> \
+  --scopes agents:read,agents:write
+npm run fad-admin -- mcp disable --binding-id <binding-uuid>
+```
+
+Run the migration job before you enable the flag. When the flag is on and the issuer settings are absent, the process stays up, `/health/live` stays ok, and `/health/ready` and `/mcp` answer 503. To roll back, set the flag to `false` or deploy the previous API image. Do not drop `mcp_principal_bindings`. The optional client is `@fad/mcp-client`. `@fad/sdk` keeps its arguments and results.
 
 ### Rotate a key and stop a caller
 

@@ -1,0 +1,8 @@
+{
+  "id": "PROTO-BATCH",
+  "utc": "2026-10-21T19:00:26.685Z",
+  "command": "node --test --test-concurrency=1 tests/slice4.test.mjs",
+  "pass": true,
+  "exit_status": 0,
+  "detail": "anon=401 status=400 code=-32600 before=1 after=1"
+}

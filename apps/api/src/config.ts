@@ -1,6 +1,7 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { assertPepper, PepperError } from '@fad/auth-core';
+import { APPROVED_MCP_TOOLS } from './mcp-catalog.js';
 
 export class ConfigError extends Error {
   constructor(message: string) {
@@ -43,6 +44,25 @@ export interface AppConfig {
   endpointWriteBodyMaxBytes: number;
   bindingWriteBodyMaxBytes: number;
   discoveryBodyMaxBytes: number;
+  mcp: McpConfig;
+}
+
+export interface McpConfig {
+  enabled: boolean;
+  configured: boolean;
+  resourceUri: string;
+  audience: string;
+  issuers: string[];
+  allowedOrigins: string[];
+  allowedHosts: string[];
+  bodyLimitBytes: number;
+  requestTimeoutMs: number;
+  concurrencyPerOrg: number;
+  toolset: ReadonlySet<string> | null;
+  jwksTimeoutMs: number;
+  jwksCooldownMs: number;
+  jwksTlsInsecure: boolean;
+  metadataUrl: string;
 }
 
 function integer(name: string, fallback: number, min: number, max: number, env: NodeJS.ProcessEnv): number {
@@ -132,6 +152,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const migrationsDir = env.FAD_MIGRATIONS_DIR && env.FAD_MIGRATIONS_DIR.length > 0
     ? env.FAD_MIGRATIONS_DIR
     : resolve(dirname(fileURLToPath(import.meta.url)), '../../../db/migrations');
+  const mcp = loadMcp(env, nodeEnv);
+  if (mcp.enabled && mcp.requestTimeoutMs > shutdownGraceMs) {
+    throw new ConfigError('FAD_SHUTDOWN_GRACE_MS must be at least FAD_MCP_REQUEST_TIMEOUT_MS');
+  }
   return {
     nodeEnv,
     port,
@@ -166,5 +190,126 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     endpointWriteBodyMaxBytes: integer('FAD_ENDPOINT_WRITE_BODY_MAX_BYTES', 4096, 1, 4096, env),
     bindingWriteBodyMaxBytes: integer('FAD_BINDING_WRITE_BODY_MAX_BYTES', 4096, 1, 4096, env),
     discoveryBodyMaxBytes: integer('FAD_DISCOVERY_BODY_MAX_BYTES', 16_384, 1, 16_384, env),
+    mcp,
   };
+}
+
+function splitList(value: string | undefined): string[] {
+  if (value === undefined || value.trim() === '') return [];
+  return value.split(',').map((item) => item.trim()).filter((item) => item.length > 0);
+}
+
+function httpsIssuer(value: string): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new ConfigError('FAD_MCP_AUTH_ISSUERS contains an invalid URL');
+  }
+  if (url.protocol !== 'https:' || url.username !== '' || url.password !== '' || url.search !== '' || url.hash !== '') {
+    throw new ConfigError('FAD_MCP_AUTH_ISSUERS must be https URLs without userinfo, query, or hash');
+  }
+  if (url.pathname !== '/' && url.pathname !== '') {
+    throw new ConfigError('FAD_MCP_AUTH_ISSUERS must not include a path');
+  }
+  return url;
+}
+
+function loadMcp(env: NodeJS.ProcessEnv, nodeEnv: AppConfig['nodeEnv']): McpConfig {
+  const jwksTlsInsecure = env.FAD_MCP_JWKS_TLS_INSECURE === 'true';
+  if (nodeEnv === 'production' && jwksTlsInsecure) {
+    throw new ConfigError('production rejects FAD_MCP_JWKS_TLS_INSECURE');
+  }
+  const enabled = env.FAD_MCP_ENABLED === 'true';
+  const toolset = loadToolset(env.FAD_MCP_TOOLSET);
+  const bodyLimitBytes = integer('FAD_MCP_BODY_LIMIT_BYTES', 65_536, 1, 65_536, env);
+  const requestTimeoutMs = integer('FAD_MCP_REQUEST_TIMEOUT_MS', 10_000, 100, 60_000, env);
+  const concurrencyPerOrg = integer('FAD_MCP_CONCURRENCY_PER_ORG', 16, 1, 64, env);
+  const jwksTimeoutMs = integer('FAD_MCP_JWKS_TIMEOUT_MS', 2000, 100, 10_000, env);
+  const jwksCooldownMs = integer('FAD_MCP_JWKS_COOLDOWN_MS', 30_000, 0, 300_000, env);
+  const resourceRaw = env.FAD_MCP_RESOURCE_URI ?? '';
+  const audienceRaw = env.FAD_MCP_EXPECTED_AUDIENCE ?? '';
+  const issuersRaw = env.FAD_MCP_AUTH_ISSUERS ?? '';
+  const hostsRaw = env.FAD_HTTP_ALLOWED_HOSTS ?? '';
+  const anySet = [resourceRaw, audienceRaw, issuersRaw, hostsRaw].some((item) => item.trim() !== '');
+  if (!enabled || !anySet) {
+    return {
+      enabled,
+      configured: false,
+      resourceUri: '',
+      audience: '',
+      issuers: [],
+      allowedOrigins: [],
+      allowedHosts: [],
+      bodyLimitBytes,
+      requestTimeoutMs,
+      concurrencyPerOrg,
+      toolset,
+      jwksTimeoutMs,
+      jwksCooldownMs,
+      jwksTlsInsecure,
+      metadataUrl: '',
+    };
+  }
+  if (resourceRaw.trim() === '' || audienceRaw.trim() === '' || issuersRaw.trim() === '' || hostsRaw.trim() === '') {
+    throw new ConfigError('MCP issuer configuration is incomplete');
+  }
+  let resource: URL;
+  try {
+    resource = new URL(resourceRaw);
+  } catch {
+    throw new ConfigError('FAD_MCP_RESOURCE_URI is not a URL');
+  }
+  if (resource.username !== '' || resource.password !== '' || resource.search !== '' || resource.hash !== '') {
+    throw new ConfigError('FAD_MCP_RESOURCE_URI must not include userinfo, query, or hash');
+  }
+  if (nodeEnv === 'production') {
+    if (resource.protocol !== 'https:') throw new ConfigError('production FAD_MCP_RESOURCE_URI must be https');
+  } else if (resource.protocol === 'http:') {
+    if (!loopback(resource.hostname)) throw new ConfigError('cleartext MCP resource URI requires a loopback host');
+  } else if (resource.protocol !== 'https:') {
+    throw new ConfigError('FAD_MCP_RESOURCE_URI must be http or https');
+  }
+  if (audienceRaw !== resourceRaw) {
+    throw new ConfigError('FAD_MCP_EXPECTED_AUDIENCE must equal FAD_MCP_RESOURCE_URI');
+  }
+  const issuers = splitList(issuersRaw);
+  if (issuers.length === 0) throw new ConfigError('FAD_MCP_AUTH_ISSUERS is required');
+  const seen = new Set<string>();
+  for (const issuer of issuers) {
+    httpsIssuer(issuer);
+    if (seen.has(issuer)) throw new ConfigError('FAD_MCP_AUTH_ISSUERS contains a duplicate');
+    seen.add(issuer);
+  }
+  const allowedHosts = splitList(hostsRaw);
+  if (allowedHosts.length === 0) throw new ConfigError('FAD_HTTP_ALLOWED_HOSTS is required when MCP is configured');
+  const metadata = new URL('/.well-known/oauth-protected-resource/mcp', resource.origin);
+  return {
+    enabled: true,
+    configured: true,
+    resourceUri: resourceRaw,
+    audience: audienceRaw,
+    issuers,
+    allowedOrigins: splitList(env.FAD_MCP_ALLOWED_ORIGINS),
+    allowedHosts,
+    bodyLimitBytes,
+    requestTimeoutMs,
+    concurrencyPerOrg,
+    toolset,
+    jwksTimeoutMs,
+    jwksCooldownMs,
+    jwksTlsInsecure,
+    metadataUrl: metadata.toString(),
+  };
+}
+
+function loadToolset(value: string | undefined): ReadonlySet<string> | null {
+  if (value === undefined) return null;
+  const names = splitList(value);
+  if (names.length === 0) throw new ConfigError('FAD_MCP_TOOLSET must name approved tools');
+  const approved = new Set<string>(APPROVED_MCP_TOOLS);
+  for (const name of names) {
+    if (!approved.has(name)) throw new ConfigError(`FAD_MCP_TOOLSET rejects ${name}`);
+  }
+  return new Set(names);
 }

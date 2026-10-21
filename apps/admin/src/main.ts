@@ -37,6 +37,7 @@ async function main(): Promise<void> {
     if (isDependencyError(err)) fail('DEPENDENCY', 'Database is unavailable', 2);
     const code = typeof err === 'object' && err !== null && 'code' in err ? String((err as { code?: unknown }).code) : '';
     if (code === '23503') fail('CROSS_TENANT', 'Cross-tenant reference was rejected', 1);
+    if (code === '23505') fail('CONFLICT', 'The identity is already bound', 1);
     if (code === '23514') fail('INVALID_ARGUMENT', 'Database constraint rejected the change', 1);
     fail('DEPENDENCY', 'Command failed', 2);
   } finally {

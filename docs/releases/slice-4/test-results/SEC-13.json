@@ -1,0 +1,8 @@
+{
+  "id": "SEC-13",
+  "utc": "2026-10-21T19:00:42.802Z",
+  "command": "node --test --test-concurrency=1 tests/slice4.test.mjs",
+  "pass": true,
+  "exit_status": 0,
+  "detail": "list=200 denied=401,401,401 rest=200"
+}

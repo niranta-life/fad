@@ -3,9 +3,11 @@ import { randomUUID } from 'node:crypto';
 import Fastify, { LogController, type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { redactText } from '@fad/auth-core';
 import { contract, errorEnvelope, successEnvelope, type ErrorCode } from '@fad/contract';
-import { SLICE3_MIGRATION_VERSION, TAG_MIGRATION_VERSION, cleanupRateLimits, consumeRateLimit, isDependencyError, rateLimitBucket, readMigrationFiles } from '@fad/db';
+import { MCP_MIGRATION_VERSION, SLICE3_MIGRATION_VERSION, TAG_MIGRATION_VERSION, cleanupRateLimits, consumeRateLimit, isDependencyError, rateLimitBucket, readMigrationFiles } from '@fad/db';
 import type { Pool } from 'pg';
 import { registerAgentRoutes } from './agent-routes.js';
+import { JsonLimitError, assertJsonLimits } from './json-limits.js';
+import { registerMcpRoutes } from './mcp-routes.js';
 import { registerSlice3Routes } from './slice3-routes.js';
 import { registerTagRoutes } from './tag-routes.js';
 import { resolveCurrentOrganization } from './auth.js';
@@ -19,8 +21,9 @@ const CAPABILITY_VERSION_PATH = /^\/v1\/capabilities\/[^/]+\/versions\/[^/]+$/;
 const AGENT_ENDPOINT_PATH = /^\/v1\/agents\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/endpoints(?:\/[^/]+)?$/i;
 const AGENT_BINDING_PATH = /^\/v1\/agents\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/capabilities(?:\/[^/]+)?$/i;
 
-function knownPath(path: string, tagsEnabled: boolean, slice3Enabled: boolean): boolean {
+function knownPath(path: string, tagsEnabled: boolean, slice3Enabled: boolean, mcpEnabled: boolean): boolean {
   if (PATHS.has(path) || AGENT_PATH.test(path)) return true;
+  if (mcpEnabled && (path === '/mcp' || path === '/.well-known/oauth-protected-resource/mcp')) return true;
   if (tagsEnabled && (path === '/v1/tag-definitions' || path === '/v1/agents/search' || TAG_DEFINITION_PATH.test(path) || AGENT_TAGS_PATH.test(path))) {
     return true;
   }
@@ -70,6 +73,23 @@ export async function assertRuntimeRole(pool: Pool): Promise<void> {
   }
 }
 
+export async function assertMcpBindingPrivileges(pool: Pool): Promise<void> {
+  const exists = await pool.query<{ present: string | null }>(
+    `SELECT to_regclass('public.mcp_principal_bindings')::text AS present`,
+  );
+  if (!exists.rows[0]?.present) return;
+  const privilege = await pool.query<{ can_insert: boolean; can_update: boolean; can_delete: boolean }>(
+    `SELECT
+       has_table_privilege(current_user, 'public.mcp_principal_bindings', 'INSERT') AS can_insert,
+       has_table_privilege(current_user, 'public.mcp_principal_bindings', 'UPDATE') AS can_update,
+       has_table_privilege(current_user, 'public.mcp_principal_bindings', 'DELETE') AS can_delete`,
+  );
+  const row = privilege.rows[0];
+  if (!row || row.can_insert || row.can_update || row.can_delete) {
+    throw new Error('API database role can write MCP bindings');
+  }
+}
+
 export async function buildApp(options: {
   config: AppConfig;
   pool: Pool;
@@ -84,7 +104,7 @@ export async function buildApp(options: {
     requestIdHeader: false,
     logController: new LogController({ disableRequestLogging: true }),
     bodyLimit: 16 * 1024,
-    requestTimeout: config.requestTimeoutMs,
+    requestTimeout: Math.max(config.requestTimeoutMs, config.mcp.enabled ? config.mcp.requestTimeoutMs : 0),
     trustProxy: config.trustProxy,
     logger: {
       level: config.logLevel,
@@ -99,6 +119,24 @@ export async function buildApp(options: {
   // Clients that send the request and then FIN (Connection: close) are half-closed.
   // Node otherwise ends the socket before an async handler can write the status line.
   (app.server as unknown as { httpAllowHalfOpen: boolean }).httpAllowHalfOpen = true;
+
+  app.removeContentTypeParser('application/json');
+  app.addContentTypeParser(/^application\/json(?:\s*;|$)/i, { parseAs: 'string' }, (request, body, done) => {
+    const text = typeof body === 'string' ? body : '';
+    const path = request.url.split('?')[0] ?? '';
+    try {
+      if (path === '/mcp') assertJsonLimits(text, 32);
+      done(null, JSON.parse(text) as unknown);
+    } catch (error) {
+      if (error instanceof JsonLimitError) {
+        done(error);
+        return;
+      }
+      const syntax = error instanceof SyntaxError ? error : new SyntaxError('Invalid JSON');
+      Object.assign(syntax, { statusCode: 400 });
+      done(syntax);
+    }
+  });
 
   function send(reply: FastifyReply, requestId: string, status: number, body: unknown, schema: string, cache: string): FastifyReply {
     try {
@@ -154,6 +192,44 @@ export async function buildApp(options: {
 
   app.setErrorHandler((error, request, reply) => {
     if (reply.sent) return;
+    const path = request.url.split('?')[0] ?? '';
+    if (path === '/mcp') {
+      const statusCode = typeof error === 'object' && error !== null && 'statusCode' in error
+        ? Number((error as { statusCode?: number }).statusCode)
+        : 500;
+      const limit = error instanceof JsonLimitError ? error : undefined;
+      let status = 503;
+      let rpc = -32603;
+      let message = 'Internal error';
+      if (limit) {
+        status = 400;
+        rpc = limit.mcpCode;
+        message = limit.message;
+      } else if (statusCode === 413) {
+        status = 413;
+        rpc = -32600;
+        message = 'Payload too large';
+      } else if (error instanceof SyntaxError || statusCode === 400) {
+        status = 400;
+        rpc = -32700;
+        message = 'Parse error';
+      } else if (statusCode === 415) {
+        status = 415;
+        rpc = -32600;
+        message = 'Unsupported media type';
+      }
+      request.log.error({
+        request_id: String(request.id),
+        status,
+        error_name: error instanceof Error ? error.name : 'Error',
+      }, 'request failed');
+      reply.code(status).header('cache-control', 'no-store').type('application/json; charset=utf-8').send({
+        jsonrpc: '2.0',
+        id: null,
+        error: { code: rpc, message },
+      });
+      return;
+    }
     const requestId = String(request.id);
     const statusCode = typeof error === 'object' && error !== null && 'statusCode' in error
       ? Number((error as { statusCode?: number }).statusCode)
@@ -183,7 +259,7 @@ export async function buildApp(options: {
   app.setNotFoundHandler((request, reply) => {
     const path = request.url.split('?')[0] ?? '';
     const requestId = String(request.id);
-    if (knownPath(path, config.tagsEnabled, config.slice3Enabled)) return sendError(reply, requestId, 405, 'METHOD_NOT_ALLOWED');
+    if (knownPath(path, config.tagsEnabled, config.slice3Enabled, config.mcp.enabled)) return sendError(reply, requestId, 405, 'METHOD_NOT_ALLOWED');
     return sendError(reply, requestId, 404, 'NOT_FOUND');
   });
 
@@ -212,6 +288,18 @@ export async function buildApp(options: {
           [SLICE3_MIGRATION_VERSION],
         );
         if ((slice3Schema.rowCount ?? 0) !== 1) {
+          return send(reply, requestId, 503, { status: 'not_ready' }, 'HealthUnavailable', 'no-store');
+        }
+      }
+      if (config.mcp.enabled && !config.mcp.configured) {
+        return send(reply, requestId, 503, { status: 'not_ready' }, 'HealthUnavailable', 'no-store');
+      }
+      if (config.mcp.enabled && config.mcp.configured) {
+        const mcpSchema = await pool.query(
+          'SELECT 1 FROM schema_migrations WHERE version = $1',
+          [MCP_MIGRATION_VERSION],
+        );
+        if ((mcpSchema.rowCount ?? 0) !== 1) {
           return send(reply, requestId, 503, { status: 'not_ready' }, 'HealthUnavailable', 'no-store');
         }
       }
@@ -283,6 +371,8 @@ export async function buildApp(options: {
       migrationsMatch,
     });
   }
+
+  registerMcpRoutes(app, { config, pool });
 
   return {
     app,

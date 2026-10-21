@@ -1,0 +1,8 @@
+{
+  "id": "PROTO-13",
+  "utc": "2026-10-21T19:00:26.627Z",
+  "command": "node --test --test-concurrency=1 tests/slice4.test.mjs",
+  "pass": true,
+  "exit_status": 0,
+  "detail": "text matches structured content"
+}

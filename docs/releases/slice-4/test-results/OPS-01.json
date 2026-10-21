@@ -1,0 +1,8 @@
+{
+  "id": "OPS-01",
+  "utc": "2026-10-21T19:00:24.690Z",
+  "command": "node --test --test-concurrency=1 tests/slice4.test.mjs",
+  "pass": true,
+  "exit_status": 0,
+  "detail": "version=20261023_001_mcp_identity_bindings match=true"
+}

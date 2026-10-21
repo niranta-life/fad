@@ -1,0 +1,8 @@
+{
+  "id": "TENANT-05",
+  "utc": "2026-10-21T19:00:26.231Z",
+  "command": "node --test --test-concurrency=1 tests/slice4.test.mjs",
+  "pass": true,
+  "exit_status": 0,
+  "detail": "fad_list_agents,fad_get_agent,fad_list_agent_tags,fad_search_agents_by_tags,fad_list_capabilities,fad_discover_agents"
+}

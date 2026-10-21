@@ -1,0 +1,8 @@
+{
+  "id": "OPS-07",
+  "utc": "2026-10-21T19:00:42.828Z",
+  "command": "node --test --test-concurrency=1 tests/slice4.test.mjs",
+  "pass": true,
+  "exit_status": 0,
+  "detail": "measured_ms=26 concurrency=6 os=darwin node=v25.1.0"
+}

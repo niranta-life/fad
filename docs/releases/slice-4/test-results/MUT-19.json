@@ -1,0 +1,8 @@
+{
+  "id": "MUT-19",
+  "utc": "2026-10-21T19:00:29.840Z",
+  "command": "node --test --test-concurrency=1 tests/slice4.test.mjs",
+  "pass": true,
+  "exit_status": 0,
+  "detail": "idem=0"
+}

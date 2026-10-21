@@ -1,0 +1,8 @@
+{
+  "id": "OPS-04",
+  "utc": "2026-10-21T19:00:42.438Z",
+  "command": "node --test --test-concurrency=1 tests/slice4.test.mjs",
+  "pass": true,
+  "exit_status": 0,
+  "detail": "pem_exit=1 app_exit=1 image=sha256:2b7d3fc26c60b34a04827251d949a0e761c4dd0d58c9117c06643a569384c6ac"
+}

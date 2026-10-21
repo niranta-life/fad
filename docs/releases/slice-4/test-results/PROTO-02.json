@@ -1,0 +1,8 @@
+{
+  "id": "PROTO-02",
+  "utc": "2026-10-21T19:00:26.231Z",
+  "command": "node --test --test-concurrency=1 tests/slice4.test.mjs",
+  "pass": true,
+  "exit_status": 0,
+  "detail": "fad_list_agents,fad_get_agent,fad_register_agent,fad_update_agent,fad_suspend_agent,fad_activate_agent,fad_list_agent_tags,fad_put_agent_tag,fad_search_agents_by_tags,fad_list_capabilities,fad_publish_capability,fad_put_endpoint,fad_put_binding,fad_discover_agents"
+}

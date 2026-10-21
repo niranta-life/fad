@@ -131,3 +131,9 @@ export {
 } from './slice3.js';
 export { migrationChecksum, readMigrationFiles, type MigrationFile } from './migrations.js';
 export { rateLimitBucket, consumeRateLimit, cleanupRateLimits, type RateLimitDecision } from './rate-limit.js';
+export {
+  MCP_MIGRATION_VERSION,
+  lookupMcpPrincipal,
+  mcpTenantActive,
+  type McpBindingLookup,
+} from './mcp-bindings.js';

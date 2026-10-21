@@ -34,6 +34,12 @@ const SLICE3_OPERATIONS = [
   ['delete', '/v1/agents/{agentId}/capabilities/{capabilityId}'],
   ['post', '/v1/discovery/agents'],
 ];
+const MCP_OPERATIONS = [
+  ['post', '/mcp'],
+  ['get', '/mcp'],
+  ['delete', '/mcp'],
+  ['get', '/.well-known/oauth-protected-resource/mcp'],
+];
 const TAG_OPERATIONS = [
   ['post', '/v1/tag-definitions'],
   ['get', '/v1/tag-definitions'],
@@ -160,9 +166,10 @@ for (const path of Object.keys(published.doc.paths ?? {}).sort()) {
 }
 const expectedNew = TAG_OPERATIONS.map(([method, path]) => `${method} ${path}`).sort();
 const expectedSlice3 = SLICE3_OPERATIONS.map(([method, path]) => `${method} ${path}`).sort();
+const expectedSlice4 = [...expectedSlice3, ...MCP_OPERATIONS.map(([method, path]) => `${method} ${path}`)].sort();
 const parentNewSorted = [...parentNew].sort();
-if (!same(parentNewSorted, expectedSlice3)) {
-  breaking.push(`parent new operations are not exactly the slice 3 routes: ${parentNew.join(', ')}`);
+if (!same(parentNewSorted, expectedSlice4)) {
+  breaking.push(`parent new operations are not exactly the slice 3 and MCP routes: ${parentNew.join(', ')}`);
 }
 const slice3Present = [];
 for (const [method, path] of SLICE3_OPERATIONS) {

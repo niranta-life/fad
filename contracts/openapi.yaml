@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Federated Agent Directory API
-  version: 1.3.0
+  version: 1.4.0
   description: |
     Normative public HTTP contract. Header authentication with X-FAD-API-Key
     is scoped to a single organization and principal. A supplied
@@ -13,7 +13,8 @@ info:
     endpoint metadata, capability bindings, and local discovery are additive
     Slice 3 operations. A deployment serves those routes only when Slice 3
     is enabled. Discovery does not claim that an agent is healthy, trusted,
-    or authorized for invocation.
+    or authorized for invocation. MCP at /mcp is an additive protocol. It
+    does not change /v1.
 servers:
   - url: https://fad.example.internal
 security:
@@ -27,6 +28,7 @@ tags:
   - name: Endpoints
   - name: Bindings
   - name: Discovery
+  - name: MCP
 paths:
   /health/live:
     get:
@@ -972,6 +974,100 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
         '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /mcp:
+    post:
+      tags: [MCP]
+      operationId: mcpTransportPost
+      summary: Stateless MCP JSON-RPC
+      description: |
+        Bearer access token only. X-FAD-API-Key is not accepted. The route
+        exists only when MCP is enabled and an external issuer is configured.
+        GET and DELETE do not create a session.
+      security:
+        - McpOAuthBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: JSON-RPC result
+          headers:
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '401':
+          description: Bearer challenge
+          headers:
+            WWW-Authenticate:
+              schema: { type: string }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [error]
+                properties:
+                  error: { type: string }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    get:
+      tags: [MCP]
+      operationId: mcpTransportGet
+      summary: MCP session listen is not offered
+      security: []
+      responses:
+        '405':
+          description: Method not allowed. No session is created.
+          headers:
+            Allow:
+              schema: { type: string }
+    delete:
+      tags: [MCP]
+      operationId: mcpTransportDelete
+      summary: MCP session close is not offered
+      security: []
+      responses:
+        '405':
+          description: Method not allowed. No session is created.
+          headers:
+            Allow:
+              schema: { type: string }
+  /.well-known/oauth-protected-resource/mcp:
+    get:
+      tags: [MCP]
+      operationId: getMcpResourceMetadata
+      summary: OAuth protected resource metadata for MCP
+      security: []
+      responses:
+        '200':
+          description: Protected resource metadata
+          headers:
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [resource, authorization_servers]
+                properties:
+                  resource: { type: string }
+                  authorization_servers:
+                    type: array
+                    items: { type: string }
+                  scopes_supported:
+                    type: array
+                    items: { type: string }
+                  bearer_methods_supported:
+                    type: array
+                    items: { type: string }
 components:
   securitySchemes:
     FadApiKey:
@@ -981,6 +1077,13 @@ components:
       description: |
         Opaque organization-scoped machine credential. Never put keys in URLs,
         request bodies, logs, telemetry, examples, or client-side applications.
+    McpOAuthBearer:
+      type: http
+      scheme: bearer
+      description: |
+        OAuth access token for POST /mcp. The issuer, audience, and client
+        identity come from operator configuration. This scheme is not accepted
+        on /v1.
   parameters:
     AgentId:
       name: agentId

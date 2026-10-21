@@ -1,0 +1,3 @@
+ready=ready
+agent=200
+table=mcp_principal_bindings
