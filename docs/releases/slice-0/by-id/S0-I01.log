@@ -1,0 +1,14 @@
+deployment-evidence/admin-cli.log
+Store this API key now. It will not be shown again.
+Store this API key now. It will not be shown again.
+Store this API key now. It will not be shown again.
+{"organization_id":"059b581e-2145-476d-b5c5-4eb5b6eab527","principal_id":"3402703f-158f-4e90-b4ff-7870dc0e64b5","credential_id":"61d2fdd5-e7be-4dcd-8ede-532ad635b5a1","kid":"9986cec65b63223305823f98bd54508a","api_key":"[redacted]","scopes":["organizations:read"],"status":"active","expires_at":null}
+{"organization_id":"04935950-2b06-4f92-a2f4-5ca70d4d5ccb","principal_id":"fca7498e-91c5-44ec-a942-1a85e17aa767","credential_id":"bf106047-8ef8-4ee9-9479-f2a0172a122a","kid":"e024388385e77efd79c66ace24c74362","api_key":"[redacted]","scopes":["organizations:read"],"status":"active","expires_at":null}
+Store this API key now. It will not be shown again.
+{"organization_id":"059b581e-2145-476d-b5c5-4eb5b6eab527","principal_id":"3402703f-158f-4e90-b4ff-7870dc0e64b5","credential_id":"e06ba164-79f5-4b46-bbd2-1c01b4af12fe","kid":"861db88ab38e479f7a22548931e6377c","api_key":"[redacted]","scopes":["organizations:read"],"status":"active","expires_at":null}
+api-evidence/patched-journey.log
+PASS S0-I01-issue
+PASS S0-I01-list
+coverage/unit-tests.log
+2026-10-20T21:59:39.916Z PASS S0-I01-parse
+2026-10-20T23:33:03.791Z PASS S0-I01-parse

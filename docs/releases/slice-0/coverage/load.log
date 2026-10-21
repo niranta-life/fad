@@ -1,0 +1,25 @@
+{
+  "at": "2026-10-20T22:02:00.975Z",
+  "path": "/v1/organizations/current",
+  "hardware": "Darwin arm64 Mac16,10, 10 cores, 17179869184 bytes",
+  "runtime": "API container node v24.22.0, client v25.1.0",
+  "data": "one organization row, PostgreSQL 16 in Docker",
+  "concurrency": 8,
+  "requests": 40,
+  "ok": 40,
+  "other": 0,
+  "statuses": {
+    "200": 40
+  },
+  "elapsed_ms": 44,
+  "p50_ms": 5.76,
+  "p95_ms": 11.97,
+  "note": "Sample only. Availability and latency SLOs are unmeasured."
+}
+=== 2026-10-20T23:08:01Z patched image load sample ===
+load statuses {200: 40} n 40 concurrency 8 elapsed_ms 52 p50_ms 7.00 p95_ms 27.06
+PASS load-200
+=== 2026-10-21T00:32:31Z rebuilt image load sample ===
+load statuses {200: 40} n 40 concurrency 8 elapsed_ms 59 p50_ms 9.82 p95_ms 22.85
+hardware Darwin arm64 Mac16,10 10 cores 17179869184 bytes
+PASS load-200

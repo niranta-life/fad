@@ -1,0 +1,11 @@
+api-evidence/patched-journey.log
+PASS S0-A09-revoked-existing
+PASS S0-A09
+PASS S0-A09-expired
+deployment-evidence/admin-cli.log
+{"kid":"9986cec65b63223305823f98bd54508a","status":"revoked"}
+old replica1 401
+old replica2 401
+api-evidence/http-launch-2.log
+2026-10-20T21:59:36.486Z PASS S0-A09-expired
+2026-10-20T21:59:37.288Z PASS S0-A09

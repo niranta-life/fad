@@ -1,0 +1,4 @@
+api-evidence/launch-1.json
+405 {"error":{"code":"METHOD_NOT_ALLOWED","message":"Method not allowed."},"meta":{"request_id":"ed3cc0a1-06bf-45e7-b58b-3ea2db1b0067","api_version":"v1"}}
+api-evidence/patched-journey.log
+PASS S0-A13

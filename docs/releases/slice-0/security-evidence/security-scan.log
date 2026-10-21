@@ -1,0 +1,71 @@
+=== 2026-10-20T22:02:17Z npm audit ===
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "info": 0,
+    "low": 0,
+    "moderate": 0,
+    "high": 0,
+    "critical": 0,
+    "total": 0
+  },
+  "dependencies": {
+    "prod": 76,
+    "dev": 4,
+    "optional": 1,
+    "peer": 1,
+    "peerOptional": 0,
+    "total": 81
+  }
+}
+=== secret scan of tracked-to-be source ===
+tests/unit.test.mjs:22:const pepper = Buffer.from('<redacted>', 'utf8');
+SECRET HITS
+=== image secret strings ===
+/srv/fad/apps/admin/src/main.ts
+/srv/fad/apps/admin/dist/main.js
+/srv/fad/apps/api/src/config.ts
+/srv/fad/apps/api/dist/config.js
+/srv/fad/packages/auth-core/src/keys.ts
+/srv/fad/packages/auth-core/dist/keys.js
+image tree scanned
+=== scanners ===
+trivy: not installed
+grype: not installed
+/usr/local/bin/docker
+docker scout present
+=== pepper value in image ===
+absent
+pepper value absent from image
+=== docker scout ===
+     537 [scratch]/scout.err
+       0 [scratch]/scout.sarif
+     537 total
+    i New version 1.26.0 available (installed version is 1.18.3) at https://github.com/docker/scout-cli
+Log in with your Docker ID or email address to use docker scout.
+
+If you don't have a Docker ID, head over to https://hub.docker.com to
+create one. You can log in with your password or a Personal Access Token (PAT)
+by running docker login.
+Using a limited-scope PAT grants better security and is required for organizations
+using SSO. Learn more at https://docs.docker.com/go/access-tokens/
+
+You can also log in using Docker Desktop.
+
+=== 2026-10-20T22:25:52Z release-proof ===
+PASS S0-O01
+orgs | principals | credentials | audits | migrations | revoked 
+------+------------+-------------+--------+------------+---------
+    2 |          2 |           4 |      9 |          2 |       1
+(1 row)
+version     |                         checksum_sha256                          
+-----------------+------------------------------------------------------------------
+ 0001_foundation | 09fb08e50ca20f3c1f18a32e93c03260f476c52816a976e1754a8b34505dc463
+ 0002_rate_limit | 2b8f86066af0b29968268db39ca3dd297677321339b947d46e46613f68811924
+(2 rows)
+RPO unmeasured
+RTO unmeasured
+LOGICAL_RESTORE_REQUERY not WAL PITR. See db-evidence/pitr.log.
+{"info":0,"low":0,"moderate":0,"high":0,"critical":0,"total":0}
+pepper value absent from image
+NPM_AUDIT_AND_PEPPER_GREP only. Container scan is security-evidence/trivy-run.log.

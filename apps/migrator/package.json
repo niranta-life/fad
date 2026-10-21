@@ -1,0 +1,19 @@
+{
+  "name": "@fad/migrator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "fad-migrate": "./dist/main.js"
+  },
+  "exports": {
+    ".": "./dist/migrate.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@fad/db": "0.1.0",
+    "pg": "^8.16.3"
+  }
+}

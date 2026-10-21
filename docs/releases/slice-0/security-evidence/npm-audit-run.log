@@ -1,0 +1,4 @@
+image_argument=sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f
+resolved_id=sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f
+command: docker run --rm --user node --entrypoint npm -e HOME=/tmp sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f audit --omit=dev --json
+EXIT:0

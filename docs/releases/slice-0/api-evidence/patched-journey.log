@@ -1,0 +1,103 @@
+=== 2026-10-21T00:32:31Z rebuilt image journey ===
+image sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f
+PASS image-tag
+started fad-s0-proof-api-1 port 18082 container f389be53a13f
+started fad-s0-proof-api-2 port 18083 container 971bc30b759b
+PASS fad-s0-proof-api-1-image
+PASS fad-s0-proof-api-2-image
+uid uid=1000(node) gid=1000(node) groups=1000(node)
+node v24.22.0
+PASS S0-O01-uid
+PASS S0-O01-node
+rate buckets cleared DELETE 4
+PASS S0-A01
+PASS S0-A02
+PASS S0-A01-replica
+PASS S0-A04
+transcript A replica1 200 {"data": {"id": "059b581e-2145-476d-b5c5-4eb5b6eab527", "name": "Compose Org A", "status": "active", "created_at": "2026-10-20T21:57:02.209Z"}, "meta": {"request_id": "01aa4043-d0b3-4c4c-acfa-084d22e4c5f6", "api_version": "v1"}}
+PASS S0-A04-replica
+PASS S0-A05
+transcript B replica1 200 {"data": {"id": "04935950-2b06-4f92-a2f4-5ca70d4d5ccb", "name": "Compose Org B", "status": "active", "created_at": "2026-10-20T21:57:02.391Z"}, "meta": {"request_id": "cc0bbed3-727d-474e-bd36-2c8f46fa419d", "api_version": "v1"}}
+PASS S0-A05-replica
+PASS S0-O02
+PASS S0-A06
+PASS S0-A07
+PASS S0-A08
+PASS S0-A10
+PASS S0-A09-revoked-existing
+PASS S0-I01-issue
+issued kid fb097e31afb8525d26d67a3f1670d2f7 shown-once stderr-present True
+PASS S0-I01-list
+PASS S0-I03-both-before
+PASS S0-I03-cli
+PASS S0-A09
+PASS S0-I03
+PASS S0-I04
+PASS S0-I05
+PASS expire-issue
+PASS S0-A09-expired
+PASS suspend-create
+PASS suspend-principal
+PASS S0-A11-org
+PASS S0-A11
+PASS S0-A12
+PASS S0-A13
+PASS S0-O05
+PASS S0-O03
+=== db outage ===
+PASS S0-A03
+outage ready 503 {'status': 'not_ready'}
+outage current 503 {'error': {'code': 'DEPENDENCY_UNAVAILABLE', 'message': 'Service temporarily unavailable.'}, 'meta': {'request_id': '063294f1-a6bf-40f6-a88f-bde237071463', 'api_version': 'v1'}}
+PASS S0-O04
+recovered 200 org 059b581e-2145-476d-b5c5-4eb5b6eab527
+started fad-s0-proof-api-1 port 18082 container d4f908d9fbf4
+started fad-s0-proof-api-2 port 18083 container 79a5f7ec9f5e
+PASS S0-A14
+rate third 429 {'error': {'code': 'RATE_LIMITED', 'message': 'Request limit exceeded.'}, 'meta': {'request_id': 'ebfcbb24-8407-46f5-a206-c8666a35cb42', 'api_version': 'v1'}} retry-after 22
+started fad-s0-proof-api-1 port 18082 container a7f3bf4b1f48
+started fad-s0-proof-api-2 port 18083 container 55f9aa8ec0ab
+load statuses {200: 40} n 40 concurrency 8 elapsed_ms 59 p50_ms 9.82 p95_ms 22.85
+PASS load-200
+PASS S0-logs-no-secret
+acceptance-smoke exit 0
+PASS live HTTP
+PASS liveness body
+PASS ready HTTP
+PASS readiness body
+PASS a HTTP
+PASS b HTTP
+PASS org A identity
+PASS org B identity
+PASS api version
+PASS no-store cache
+PASS missing HTTP
+PASS malformed HTTP
+PASS missing error code
+PASS invalid error code
+PASS ignore_org_header HTTP
+PASS cannot select other organization
+PASS bad_query HTTP
+PASS no_scope HTTP
+PASS revoked HTTP
+PASS Slice 0 HTTP smoke (requires separate DB/RLS/security tests)
+
+
+PASS acceptance-smoke
+sdk-external exit 0
+PASS S0-K01
+PASS K02 059b581e-2145-476d-b5c5-4eb5b6eab527 v1 request e03d7a19-6cdf-47bf-aa78-01def6736f3e
+PASS health ok ready
+PASS 403 FORBIDDEN fe543dfa-ea84-4964-841b-f00197b7ec79
+PASS 401 UNAUTHORIZED 12ba6797-d240-4b5e-a6ec-3c5befe136c0
+PASS 429 RATE_LIMITED retryAfter 21 request 32ef926a-adec-4b95-9f19-6cab02dca228
+PASS redirect
+PASS abort
+PASS no server import
+PASS no agents method
+node v25.1.0
+consumer [scratch]/fad-sdk-consumer-heF7ZW
+tarball fad-sdk-0.1.0.tgz
+
+
+PASS sdk-external
+PASS journey-image

@@ -1,0 +1,6 @@
+api-evidence/launch-1.json
+400 {"error":{"code":"VALIDATION_ERROR","message":"Invalid request."},"meta":{"request_id":"a6ec8db8-ba56-4976-8e05-a311514c2cff","api_version":"v1"}}
+api-evidence/patched-journey.log
+PASS S0-A07
+api-evidence/acceptance-smoke.log
+PASS bad_query HTTP

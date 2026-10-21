@@ -1,0 +1,7 @@
+name=/fad-s0-proof-api-1 user=node readonly=true status=running image=sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f
+name=/fad-s0-proof-api-2 user=node readonly=true status=running image=sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f
+image user=node NODE_VERSION=24.22.0 NODE_ENV=production HOME=/tmp
+uid=1000(node) gid=1000(node) groups=1000(node)
+node v24.22.0
+command: docker inspect fad-s0-proof-api-1 fad-s0-proof-api-2 fad-api:local
+captured 2026-10-21T00:32Z after the rebuilt-image journey. Config.Env values were not copied.

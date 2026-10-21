@@ -1,0 +1,11 @@
+coverage/unit-tests.log
+2026-10-20T21:59:39.917Z PASS S0-I06-unit-missing
+2026-10-20T21:59:39.918Z PASS S0-I06-unit-weak
+2026-10-20T21:59:40.064Z PASS S0-I06-process-missing
+2026-10-20T21:59:40.207Z PASS S0-I06-process-weak
+✔ S0-I06 process rejects a missing or weak pepper (289.23558ms)
+2026-10-20T23:33:03.792Z PASS S0-I06-unit-missing
+2026-10-20T23:33:03.792Z PASS S0-I06-unit-weak
+2026-10-20T23:33:03.857Z PASS S0-I06-process-missing
+2026-10-20T23:33:03.922Z PASS S0-I06-process-weak
+✔ S0-I06 process rejects a missing or weak pepper (129.740987ms)

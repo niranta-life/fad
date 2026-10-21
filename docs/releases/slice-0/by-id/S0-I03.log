@@ -1,0 +1,10 @@
+deployment-evidence/admin-cli.log
+{"kid":"9986cec65b63223305823f98bd54508a","status":"revoked"}
+old replica1 401
+old replica2 401
+new replica1 {"data":{"id":"059b581e-2145-476d-b5c5-4eb5b6eab527","name":"Compose Org A","status":"active","created_at":"2026-10-20T21:57:02.209Z"},"meta":{"request_id":"a52fb57c-b371-4126-90b4-e73cba36383a","api_version":"v1"}}
+new replica2 {"data":{"id":"059b581e-2145-476d-b5c5-4eb5b6eab527","name":"Compose Org A","status":"active","created_at":"2026-10-20T21:57:02.209Z"},"meta":{"request_id":"03ea26f2-82b9-4bb4-8592-c89eb3c6bec7","api_version":"v1"}}
+api-evidence/patched-journey.log
+PASS S0-I03-both-before
+PASS S0-I03-cli
+PASS S0-I03

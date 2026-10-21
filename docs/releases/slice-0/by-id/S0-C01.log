@@ -1,0 +1,14 @@
+coverage/node24-suite.log
+2026-10-20T23:09:25.904Z PASS S0-C01-bytes
+2026-10-20T23:09:25.905Z PASS S0-C01-migration
+2026-10-20T23:09:25.915Z PASS S0-C01-version
+2026-10-20T23:09:25.915Z PASS S0-C01-paths
+2026-10-20T23:09:25.915Z PASS S0-C01-header
+2026-10-20T23:09:25.937Z PASS S0-C01-closed
+2026-10-20T23:09:25.940Z PASS S0-C01-compose-context
+openapi-diff.md
+Published file SHA-256: bb5a6dc96ae93fb42ed6b69af1770cd435bba43809c8942b0702d9a748beb4cc
+Byte-identical to plans/fad-slice-0/contracts/openapi.yaml: true
+- get /health/live
+- get /health/ready
+- get /v1/organizations/current

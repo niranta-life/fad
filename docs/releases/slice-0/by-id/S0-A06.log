@@ -1,0 +1,9 @@
+api-evidence/launch-1.json
+200 {"data":{"id":"bf9a8d4c-f41c-4a6e-a4c6-e82381582fd6","name":"HTTP Org A","status":"active","created_at":"2026-10-20T21:59:35.210Z"},"meta":{"request_id":"91b9c44b-d291-4b4a-a366-79ef6c2184e1","api_version":"v1"}}
+api-evidence/patched-journey.log
+PASS S0-A06
+api-evidence/http-launch-1.log
+2026-10-20T21:59:36.080Z PASS S0-A06
+api-evidence/acceptance-smoke.log
+PASS ignore_org_header HTTP
+PASS cannot select other organization

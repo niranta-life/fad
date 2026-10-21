@@ -1,0 +1,75 @@
+# Local stack. TLS, HA Postgres, and an external secrets manager are not this file.
+# Migrations run in the one-shot migrate service. The API process does not apply DDL.
+services:
+  postgres:
+    image: postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+    environment:
+      POSTGRES_DB: fad
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${FAD_DEV_POSTGRES_PASSWORD:?set for local testing}
+    volumes:
+      - fad-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fad"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks: [internal]
+
+  migrate:
+    image: fad-api:local
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    entrypoint: ["node", "apps/migrator/dist/main.js"]
+    command: ["bootstrap"]
+    environment:
+      FAD_MIGRATOR_DATABASE_URL: postgres://postgres:${FAD_DEV_POSTGRES_PASSWORD}@postgres:5432/fad
+      FAD_APP_DB_PASSWORD: ${FAD_APP_DB_PASSWORD:?set fad_app password}
+      NODE_ENV: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+    restart: "no"
+    init: true
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+
+  api:
+    image: fad-api:local
+    ports:
+      - "127.0.0.1:${FAD_PUBLISH_PORT:-8080}:8080"
+    environment:
+      NODE_ENV: development
+      PORT: "8080"
+      FAD_BIND_HOST: 0.0.0.0
+      FAD_DEV_LOOPBACK_PUBLISH: "true"
+      FAD_INGRESS_TLS: cleartext
+      DATABASE_URL: postgres://fad_app:${FAD_APP_DB_PASSWORD}@postgres:5432/fad
+      FAD_API_KEY_PEPPER_V1: ${FAD_API_KEY_PEPPER_V1:?provide 32+ bytes from secret store}
+      FAD_DB_POOL_MAX: "5"
+      FAD_HTTP_REQUEST_TIMEOUT_MS: "5000"
+      FAD_SHUTDOWN_GRACE_MS: "10000"
+      FAD_TRUST_PROXY: "false"
+      FAD_RATE_LIMIT_BACKEND: postgres
+      FAD_RATE_LIMIT_MAX: "60"
+      FAD_RATE_LIMIT_WINDOW_SECONDS: "60"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [internal]
+    restart: unless-stopped
+    init: true
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+
+networks:
+  internal:
+
+volumes:
+  fad-pgdata:

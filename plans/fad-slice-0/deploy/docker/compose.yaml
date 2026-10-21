@@ -1,0 +1,48 @@
+# DEVELOPMENT / LOCAL STAGING REFERENCE. Not production TLS/HA/secrets setup.
+# Requires implemented monorepo, database bootstrap, and migrations.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: fad
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${FAD_DEV_POSTGRES_PASSWORD:?set for local testing}
+    volumes:
+      - fad-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fad"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [internal]
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    ports:
+      - '127.0.0.1:8080:8080'
+    environment:
+      NODE_ENV: development
+      PORT: '8080'
+      DATABASE_URL: ${FAD_DEV_APP_DATABASE_URL:?provision fad_app DB role}
+      FAD_API_KEY_PEPPER_V1: ${FAD_API_KEY_PEPPER_V1:?provide 32+ bytes from secret store}
+      FAD_DB_POOL_MAX: '5'
+      FAD_HTTP_REQUEST_TIMEOUT_MS: '5000'
+      FAD_SHUTDOWN_GRACE_MS: '10000'
+      FAD_TRUST_PROXY: 'false'
+      FAD_RATE_LIMIT_BACKEND: ${FAD_RATE_LIMIT_BACKEND:-development}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+    restart: unless-stopped
+    init: true
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
+
+networks:
+  internal:
+volumes:
+  fad-pgdata:

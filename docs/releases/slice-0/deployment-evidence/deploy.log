@@ -1,0 +1,57 @@
+=== 2026-10-20T21:56:27Z image ===
+id=sha256:5d29acf83dcc2373b8f4ff31362a2bd147f0199172dbedc31cde2c20df3e7a3b created=2026-10-20T14:54:46.469058044-07:00 user=node env=["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin","NODE_VERSION=24.22.0","YARN_VERSION=1.22.22","NODE_ENV=production","PORT=8080","HOME=/tmp"]
+node v24.22.0
+uid uid=1000(node) gid=1000(node) groups=1000(node)
+=== health ===
+HTTP/1.1 200 OK
+x-request-id: cc7c011c-cd7c-44fb-993e-7387317e25c1
+x-content-type-options: nosniff
+cache-control: no-store
+content-type: application/json; charset=utf-8
+content-length: 15
+Date: Tue, 20 Oct 2026 21:56:27 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+{"status":"ok"}
+HTTP/1.1 200 OK
+x-request-id: 8d33603e-7d30-4d00-9a77-aee89ba1cc75
+x-content-type-options: nosniff
+cache-control: no-store
+content-type: application/json; charset=utf-8
+content-length: 18
+Date: Tue, 20 Oct 2026 21:56:27 GMT
+Connection: keep-alive
+Keep-Alive: timeout=72
+
+{"status":"ready"}
+=== api log ddl scan ===
+no DDL statements in API logs
+=== migrate log ===
+{"ok":true,"action":"bootstrap","applied":["0001_foundation","0002_rate_limit"],"skipped":[]}
+{"ok":true,"action":"bootstrap","applied":[],"skipped":["0001_foundation","0002_rate_limit"]}
+
+=== 2026-10-20T22:25:52Z release-proof ===
+PASS S0-O01
+orgs | principals | credentials | audits | migrations | revoked 
+------+------------+-------------+--------+------------+---------
+    2 |          2 |           4 |      9 |          2 |       1
+(1 row)
+version     |                         checksum_sha256                          
+-----------------+------------------------------------------------------------------
+ 0001_foundation | 09fb08e50ca20f3c1f18a32e93c03260f476c52816a976e1754a8b34505dc463
+ 0002_rate_limit | 2b8f86066af0b29968268db39ca3dd297677321339b947d46e46613f68811924
+(2 rows)
+RPO unmeasured
+RTO unmeasured
+LOGICAL_RESTORE_REQUERY not WAL PITR. See db-evidence/pitr.log.
+{"info":0,"low":0,"moderate":0,"high":0,"critical":0,"total":0}
+pepper value absent from image
+NPM_AUDIT_AND_PEPPER_GREP only. Container scan is security-evidence/trivy-run.log.
+
+=== 2026-10-21T00:32:31Z rebuilt image ===
+image sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f
+uid uid=1000(node) gid=1000(node) groups=1000(node)
+node v24.22.0
+PASS S0-O01
+journey api-evidence/patched-journey.log

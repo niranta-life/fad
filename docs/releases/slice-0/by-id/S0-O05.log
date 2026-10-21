@@ -1,0 +1,7 @@
+deployment-evidence/admin-cli.log
+after restart {"data":{"id":"059b581e-2145-476d-b5c5-4eb5b6eab527","name":"Compose Org A","status":"active","created_at":"2026-10-20T21:57:02.209Z"},"meta":{"request_id":"97b7994c-be8a-4a5f-95c9-88a334b42632","api_version":"v1"}}
+revoked still 401
+api-evidence/patched-journey.log
+PASS S0-O05
+api-evidence/http-launch-2.log
+2026-10-20T21:59:39.016Z PASS S0-O05-db

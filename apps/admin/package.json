@@ -1,0 +1,21 @@
+{
+  "name": "@fad/admin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "fad-admin": "./dist/main.js"
+  },
+  "exports": {
+    ".": "./dist/main.js",
+    "./cli": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@fad/auth-core": "0.1.0",
+    "@fad/db": "0.1.0",
+    "pg": "^8.16.3"
+  }
+}

@@ -1,0 +1,8 @@
+deployment-evidence/admin-cli.log
+replica1 A {"data":{"id":"059b581e-2145-476d-b5c5-4eb5b6eab527","name":"Compose Org A","status":"active","created_at":"2026-10-20T21:57:02.209Z"},"meta":{"request_id":"09da303b-281d-48ee-bd7c-c752614e3aa5","api_version":"v1"}}
+replica2 B {"data":{"id":"04935950-2b06-4f92-a2f4-5ca70d4d5ccb","name":"Compose Org B","status":"active","created_at":"2026-10-20T21:57:02.391Z"},"meta":{"request_id":"4b0091b3-ae31-4564-85cb-d71569438aa0","api_version":"v1"}}
+replica2 A {"data":{"id":"059b581e-2145-476d-b5c5-4eb5b6eab527","name":"Compose Org A","status":"active","created_at":"2026-10-20T21:57:02.209Z"},"meta":{"request_id":"6d87eec6-84eb-46ef-bd4f-86fcd5e8b53d","api_version":"v1"}}
+api-evidence/patched-journey.log
+PASS S0-O02
+api-evidence/http-launch-2.log
+2026-10-20T21:59:37.290Z PASS S0-O02

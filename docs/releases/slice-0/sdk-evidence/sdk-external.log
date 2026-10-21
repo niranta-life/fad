@@ -1,0 +1,13 @@
+PASS S0-K01
+PASS K02 059b581e-2145-476d-b5c5-4eb5b6eab527 v1 request e03d7a19-6cdf-47bf-aa78-01def6736f3e
+PASS health ok ready
+PASS 403 FORBIDDEN fe543dfa-ea84-4964-841b-f00197b7ec79
+PASS 401 UNAUTHORIZED 12ba6797-d240-4b5e-a6ec-3c5befe136c0
+PASS 429 RATE_LIMITED retryAfter 21 request 32ef926a-adec-4b95-9f19-6cab02dca228
+PASS redirect
+PASS abort
+PASS no server import
+PASS no agents method
+node v25.1.0
+consumer [scratch]/fad-sdk-consumer-heF7ZW
+tarball fad-sdk-0.1.0.tgz

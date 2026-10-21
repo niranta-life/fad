@@ -1,0 +1,241 @@
+openapi: 3.1.0
+info:
+  title: Federated Agent Directory API — Slice 0 Foundation
+  version: 1.0.0
+  description: |
+    Normative public HTTP contract for Slice 0. Header authentication with
+    X-FAD-API-Key is scoped to a single organization and principal. A supplied
+    tenant/organization selector never changes the authenticated tenant.
+servers:
+  - url: https://fad.example.internal
+security:
+  - FadApiKey: []
+tags:
+  - name: Health
+  - name: Organizations
+paths:
+  /health/live:
+    get:
+      tags: [Health]
+      operationId: getLiveness
+      summary: Process liveness (not database readiness)
+      security: []
+      responses:
+        '200':
+          description: Process is responsive
+          headers:
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Liveness' }
+              example: { status: ok }
+        '503': { $ref: '#/components/responses/HealthUnavailable' }
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: getReadiness
+      summary: Ready to serve authenticated requests
+      description: |
+        Requires database reachability and a compatible applied schema version.
+        Returns no hostnames, credential details, SQL errors or internals.
+      security: []
+      responses:
+        '200':
+          description: Ready
+          headers:
+            Cache-Control: { $ref: '#/components/headers/NoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Readiness' }
+              example: { status: ready }
+        '503': { $ref: '#/components/responses/HealthUnavailable' }
+  /v1/organizations/current:
+    get:
+      tags: [Organizations]
+      operationId: getCurrentOrganization
+      summary: Return organization bound to caller's verified API key
+      description: |
+        Requires organizations:read. The caller cannot select an organization
+        using a header, query parameter, or body. Unknown query parameters
+        return 400 VALIDATION_ERROR.
+      responses:
+        '200':
+          description: Organization for authenticated credential
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrganizationResponse' }
+              example:
+                data:
+                  id: b4fbb090-335b-4c59-bc0e-5b382ee986b5
+                  name: Example Finance
+                  status: active
+                  created_at: '2026-10-20T12:00:00.000Z'
+                meta:
+                  request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda
+                  api_version: v1
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+components:
+  securitySchemes:
+    FadApiKey:
+      type: apiKey
+      in: header
+      name: X-FAD-API-Key
+      description: |
+        Opaque organization-scoped machine credential. Never put keys in URLs,
+        request bodies, logs, telemetry, examples, or client-side applications.
+  headers:
+    RequestId:
+      description: Unique server-generated request correlation UUID.
+      schema: { type: string, format: uuid }
+    PrivateNoStore:
+      description: For protected responses, always private and no-store.
+      schema: { type: string, const: 'private, no-store' }
+    NoStore:
+      description: Health response caching is prohibited.
+      schema: { type: string, const: no-store }
+    RetryAfter:
+      description: Whole number of seconds to wait before retry.
+      schema: { type: integer, minimum: 1 }
+  schemas:
+    Liveness:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, const: ok }
+    Readiness:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, enum: [ready, not_ready] }
+    Organization:
+      type: object
+      additionalProperties: false
+      required: [id, name, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, minLength: 1, maxLength: 160 }
+        status: { type: string, enum: [active, suspended] }
+        created_at: { type: string, format: date-time }
+    ResponseMeta:
+      type: object
+      additionalProperties: true
+      required: [request_id, api_version]
+      properties:
+        request_id: { type: string, format: uuid }
+        api_version: { type: string, const: v1 }
+    OrganizationResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Organization' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    ErrorData:
+      type: object
+      additionalProperties: true
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          pattern: '^[A-Z][A-Z0-9_]*$'
+          examples: [VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, RATE_LIMITED, DEPENDENCY_UNAVAILABLE, INTERNAL_ERROR]
+        message: { type: string, minLength: 1 }
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error, meta]
+      properties:
+        error: { $ref: '#/components/schemas/ErrorData' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    HealthUnavailable:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, const: not_ready }
+  responses:
+    HealthUnavailable:
+      description: Process is not ready to serve traffic
+      headers:
+        Cache-Control: { $ref: '#/components/headers/NoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/HealthUnavailable' }
+          example: { status: not_ready }
+    BadRequest:
+      description: Malformed request or unknown query parameters
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: VALIDATION_ERROR, message: Invalid request. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    Unauthorized:
+      description: Missing, unknown, invalid, expired, or revoked credential; inactive principal or organization
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: UNAUTHORIZED, message: Invalid or missing API credential. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    Forbidden:
+      description: Authenticated principal lacks required action scope
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: FORBIDDEN, message: Insufficient permission. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    RateLimited:
+      description: Caller exceeds request quota
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: RATE_LIMITED, message: Request limit exceeded. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    InternalError:
+      description: Unexpected application failure (internal details redacted)
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: INTERNAL_ERROR, message: Internal server error. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    DependencyUnavailable:
+      description: Required database or other critical dependency unavailable
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: DEPENDENCY_UNAVAILABLE, message: Service temporarily unavailable. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }

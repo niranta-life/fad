@@ -1,0 +1,12 @@
+sdk-evidence/sdk-external.log
+PASS no server import
+PASS no agents method
+node v25.1.0
+consumer [scratch]/fad-sdk-consumer-tX1E40
+tarball fad-sdk-0.1.0.tgz
+PASS S0-K01
+PASS no server import
+PASS no agents method
+node v25.1.0
+consumer [scratch]/fad-sdk-consumer-VlMCrc
+tarball fad-sdk-0.1.0.tgz

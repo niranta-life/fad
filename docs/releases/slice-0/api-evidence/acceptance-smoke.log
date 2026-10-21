@@ -1,0 +1,21 @@
+=== 2026-10-21T00:32:31Z acceptance smoke against image sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f ===
+PASS live HTTP
+PASS liveness body
+PASS ready HTTP
+PASS readiness body
+PASS a HTTP
+PASS b HTTP
+PASS org A identity
+PASS org B identity
+PASS api version
+PASS no-store cache
+PASS missing HTTP
+PASS malformed HTTP
+PASS missing error code
+PASS invalid error code
+PASS ignore_org_header HTTP
+PASS cannot select other organization
+PASS bad_query HTTP
+PASS no_scope HTTP
+PASS revoked HTTP
+PASS Slice 0 HTTP smoke (requires separate DB/RLS/security tests)

@@ -1,0 +1,12 @@
+api-evidence/launch-1.json
+401 {"error":{"code":"UNAUTHORIZED","message":"Invalid or missing API credential."},"meta":{"request_id":"ac77945d-a6bc-4e6c-94ac-93a0261e96c5","api_version":"v1"}}
+401 {"error":{"code":"UNAUTHORIZED","message":"Invalid or missing API credential."},"meta":{"request_id":"f4ad75c3-4e56-44eb-8d23-a725c32f6044","api_version":"v1"}}
+401 {"error":{"code":"UNAUTHORIZED","message":"Invalid or missing API credential."},"meta":{"request_id":"9e06ba4b-3b14-4032-8310-af1f14784bdb","api_version":"v1"}}
+401 {"error":{"code":"UNAUTHORIZED","message":"Invalid or missing API credential."},"meta":{"request_id":"40adf783-6412-4694-baf7-860bbabca836","api_version":"v1"}}
+api-evidence/patched-journey.log
+PASS S0-A08
+api-evidence/acceptance-smoke.log
+PASS missing HTTP
+PASS malformed HTTP
+PASS missing error code
+PASS invalid error code

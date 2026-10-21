@@ -1,0 +1,28 @@
+Source: Node 24.22.0 suite node:lts-bookworm-slim. Log node24-suite.log. Secrets redacted. EXIT:0 tests 6 pass 6 fail 0.
+
+2026-10-20T21:59:36.054Z PASS launch-1-up
+2026-10-20T21:59:36.057Z PASS launch-1-A01
+2026-10-20T21:59:36.060Z PASS launch-1-A02
+2026-10-20T21:59:36.072Z PASS S0-A04
+2026-10-20T21:59:36.075Z PASS S0-A05
+2026-10-20T21:59:36.080Z PASS S0-A06
+2026-10-20T21:59:36.082Z PASS S0-A07
+2026-10-20T21:59:36.086Z PASS S0-A08
+2026-10-20T21:59:36.088Z PASS S0-A10
+2026-10-20T21:59:36.088Z PASS S0-A13
+2026-10-20T21:59:36.089Z PASS launch-1-logs
+2026-10-20T21:59:36.094Z PASS launch-1-stop
+
+--- transcript docs/releases/slice-0/api-evidence/launch-1.json ---
+200 {"status":"ok"}
+200 {"status":"ready"}
+200 {"data":{"id":"bf9a8d4c-f41c-4a6e-a4c6-e82381582fd6","name":"HTTP Org A","status":"active","created_at":"2026-10-20T21:59:35.210Z"},"meta":{"request_id":"1dea9bfe-2644-4f45-8cfa-0ce9b113c9fb","api_version":"v1"}}
+200 {"data":{"id":"eb4671cf-adcc-45a4-8e82-92737199d9f2","name":"HTTP Org B","status":"active","created_at":"2026-10-20T21:59:35.286Z"},"meta":{"request_id":"4bc6e08f-1a3d-4dfe-a0cd-ca6d0bba5b69","api_version":"v1"}}
+200 {"data":{"id":"bf9a8d4c-f41c-4a6e-a4c6-e82381582fd6","name":"HTTP Org A","status":"active","created_at":"2026-10-20T21:59:35.210Z"},"meta":{"request_id":"91b9c44b-d291-4b4a-a366-79ef6c2184e1","api_version":"v1"}}
+400 {"error":{"code":"VALIDATION_ERROR","message":"Invalid request."},"meta":{"request_id":"a6ec8db8-ba56-4976-8e05-a311514c2cff","api_version":"v1"}}
+401 {"error":{"code":"UNAUTHORIZED","message":"Invalid or missing API credential."},"meta":{"request_id":"ac77945d-a6bc-4e6c-94ac-93a0261e96c5","api_version":"v1"}}
+401 {"error":{"code":"UNAUTHORIZED","message":"Invalid or missing API credential."},"meta":{"request_id":"f4ad75c3-4e56-44eb-8d23-a725c32f6044","api_version":"v1"}}
+401 {"error":{"code":"UNAUTHORIZED","message":"Invalid or missing API credential."},"meta":{"request_id":"9e06ba4b-3b14-4032-8310-af1f14784bdb","api_version":"v1"}}
+401 {"error":{"code":"UNAUTHORIZED","message":"Invalid or missing API credential."},"meta":{"request_id":"40adf783-6412-4694-baf7-860bbabca836","api_version":"v1"}}
+403 {"error":{"code":"FORBIDDEN","message":"Insufficient permission."},"meta":{"request_id":"bf945064-9fb6-4377-b3b6-0af105e7a8cb","api_version":"v1"}}
+405 {"error":{"code":"METHOD_NOT_ALLOWED","message":"Method not allowed."},"meta":{"request_id":"ed3cc0a1-06bf-45e7-b58b-3ea2db1b0067","api_version":"v1"}}

@@ -1,0 +1,146 @@
+image_argument=sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f
+resolved_id=sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f
+command: docker run --rm --name fad-s0-image-suite --network fad-s0 --user node --group-add 991 -v /Users/nitin/Work/Y/fad/tests:/srv/fad/tests:ro -v /Users/nitin/Work/Y/fad/plans:/srv/fad/plans:ro -v /Users/nitin/Work/Y/fad/deploy:/srv/fad/deploy:ro -v /var/run/docker.sock:/var/run/docker.sock -v /Users/nitin/Work/Y/fad/.bin:/opt/dockerbin:ro -e NODE_ENV=development -e FAD_DEV_LOOPBACK_PUBLISH=true -e HOME=/tmp -e FAD_SCRATCH=/tmp/fad-scratch -e [redacted] -e [redacted] -e [redacted] -e [redacted] -w /srv/fad sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f sh -c mkdir -p /tmp/fad-scratch && cp /opt/dockerbin/docker /tmp/docker && chmod 755 /tmp/docker && export PATH=/tmp:$PATH && node -v && node --test --test-concurrency=1 --test-force-exit tests/contract.test.mjs tests/unit.test.mjs tests/db.test.mjs tests/http.test.mjs tests/sdk.test.mjs
+v24.22.0
+2026-10-21T00:43:36.178Z PASS S0-C01-bytes
+2026-10-21T00:43:36.180Z PASS S0-C01-migration
+2026-10-21T00:43:36.191Z PASS S0-C01-version
+2026-10-21T00:43:36.191Z PASS S0-C01-paths
+2026-10-21T00:43:36.191Z PASS S0-C01-header
+2026-10-21T00:43:36.214Z PASS S0-C01-closed
+2026-10-21T00:43:36.215Z PASS S0-C03-identical
+2026-10-21T00:43:36.215Z PASS S0-C02-unique
+2026-10-21T00:43:36.215Z PASS S0-C02-setting
+2026-10-21T00:43:36.215Z PASS S0-C02-function
+2026-10-21T00:43:36.215Z PASS S0-C02-no-select
+2026-10-21T00:43:36.215Z PASS S0-C02-status
+2026-10-21T00:43:36.217Z PASS S0-C02-no-agent-routes
+2026-10-21T00:43:36.218Z PASS S0-C01-compose-context
+✔ OpenAPI, migration identity, and Slice 1 boundary (40.464061ms)
+2026-10-21T00:43:36.275Z PASS S0-D05-role
+2026-10-21T00:43:36.275Z PASS S0-D05-owner
+2026-10-21T00:43:36.276Z PASS S0-D07-owner
+2026-10-21T00:43:36.277Z PASS S0-D05
+2026-10-21T00:43:36.277Z PASS S0-D06
+2026-10-21T00:43:36.277Z PASS S0-D06-ddl
+2026-10-21T00:43:36.401Z PASS db-orgs
+2026-10-21T00:43:36.508Z PASS S0-D03
+2026-10-21T00:43:36.509Z PASS S0-D02-select
+2026-10-21T00:43:36.510Z PASS S0-D02-write
+2026-10-21T00:43:36.511Z PASS S0-D03-override
+2026-10-21T00:43:36.512Z PASS S0-D04
+2026-10-21T00:43:36.512Z PASS S0-D04-rows
+2026-10-21T00:43:36.514Z PASS S0-D07
+2026-10-21T00:43:36.515Z PASS S0-D07-shape
+2026-10-21T00:43:36.521Z PASS S0-D08
+2026-10-21T00:43:36.522Z PASS S0-D01
+2026-10-21T00:43:36.561Z PASS S0-I05
+2026-10-21T00:43:36.586Z PASS S0-I04
+2026-10-21T00:43:36.590Z PASS S0-D09
+2026-10-21T00:43:36.591Z PASS S0-D10
+2026-10-21T00:43:36.592Z PASS S0-D10-purge
+2026-10-21T00:43:36.597Z PASS S0-D11-rerun
+2026-10-21T00:43:36.604Z PASS S0-D11-checksum
+2026-10-21T00:43:36.637Z PASS S0-D11-rollback
+2026-10-21T00:43:37.057Z PASS S0-D11-lock
+✔ PostgreSQL roles, RLS, idempotency, and migrations (808.595748ms)
+2026-10-21T00:43:37.461Z PASS S0-I01
+2026-10-21T00:43:37.462Z PASS S0-I01-audit
+2026-10-21T00:43:37.622Z PASS launch-1-up
+2026-10-21T00:43:37.626Z PASS launch-1-A01
+2026-10-21T00:43:37.629Z PASS launch-1-A02
+2026-10-21T00:43:37.642Z PASS S0-A04
+2026-10-21T00:43:37.646Z PASS S0-A05
+2026-10-21T00:43:37.650Z PASS S0-A06
+2026-10-21T00:43:37.652Z PASS S0-A07
+2026-10-21T00:43:37.658Z PASS S0-A08
+2026-10-21T00:43:37.660Z PASS S0-A10
+2026-10-21T00:43:37.661Z PASS S0-A13
+2026-10-21T00:43:37.661Z PASS launch-1-logs
+2026-10-21T00:43:37.666Z PASS launch-1-stop
+2026-10-21T00:43:37.806Z PASS launch-2-up
+2026-10-21T00:43:37.813Z PASS S0-A01
+2026-10-21T00:43:37.813Z PASS S0-A02
+2026-10-21T00:43:37.813Z PASS launch-2-org
+2026-10-21T00:43:37.868Z PASS S0-A09-expired
+2026-10-21T00:43:38.035Z PASS suspend
+2026-10-21T00:43:38.196Z PASS disable
+2026-10-21T00:43:38.198Z PASS S0-A11
+2026-10-21T00:43:38.201Z PASS S0-A12
+2026-10-21T00:43:38.276Z PASS S0-I03-cli
+2026-10-21T00:43:38.433Z PASS S0-A09
+2026-10-21T00:43:38.437Z PASS S0-O02
+2026-10-21T00:43:38.736Z PASS S0-A14
+2026-10-21T00:43:38.842Z PASS S0-A03-empty-startup
+{"level":30,"time":1792543418861,"pid":98,"hostname":"8ebb4f1c749e","msg":"Server listening at http://127.0.0.1:36571"}
+{"level":30,"time":1792543418899,"pid":98,"hostname":"8ebb4f1c749e","reqId":"83a85c0f-d464-4fab-a55f-ff2067eadb1c","request_id":"83a85c0f-d464-4fab-a55f-ff2067eadb1c","status":503,"method":"GET","path":"/health/ready","msg":"request"}
+{"level":30,"time":1792543418903,"pid":98,"hostname":"8ebb4f1c749e","reqId":"b8a248ae-b895-4d1e-a76a-5a66ad237b0c","request_id":"b8a248ae-b895-4d1e-a76a-5a66ad237b0c","status":503,"method":"GET","path":"/v1/organizations/current","msg":"request"}
+2026-10-21T00:43:38.905Z PASS S0-A03-empty-ready
+2026-10-21T00:43:39.054Z PASS S0-A03-schema
+S0-A03-schema ready 503 {"status":"not_ready"} current 503 {"error":{"code":"DEPENDENCY_UNAVAILABLE","message":"Service temporarily unavailable."},"meta":{"request_id":"1437037a-c4b4-4e4a-adfd-e71a97fd541e","api_version":"v1"}} restored-ready 200 restored-current 200
+2026-10-21T00:43:39.366Z PASS S0-A03
+2026-10-21T00:43:40.050Z PASS S0-O04
+2026-10-21T00:43:40.054Z PASS S0-O03
+2026-10-21T00:43:40.064Z PASS S0-O05-db
+✔ HTTP tenant boundary, credentials, replicas, and database outage (2965.572388ms)
+2026-10-21T00:43:40.177Z PASS S0-K03-retry
+2026-10-21T00:43:40.178Z PASS S0-K03-503
+2026-10-21T00:43:40.179Z PASS S0-K03-no-retry-401
+2026-10-21T00:43:40.188Z PASS sdk-backoff-exponential
+2026-10-21T00:43:40.189Z PASS sdk-backoff-cap
+sdk-backoff low 100,200 high 200,400 capped 1000,1000 deadline 2000
+2026-10-21T00:43:40.191Z PASS S0-K05
+2026-10-21T00:43:40.191Z PASS S0-K04
+2026-10-21T00:43:40.191Z PASS sdk-https
+2026-10-21T00:43:40.574Z PASS S0-K02
+2026-10-21T00:43:40.577Z PASS S0-K03-403
+2026-10-21T00:43:40.581Z PASS S0-K03-429
+2026-10-21T00:43:40.587Z PASS S0-K03-401
+2026-10-21T00:43:40.587Z PASS sdk-no-agents
+✔ SDK retries, cancellation, redirects, and the live API (429.490801ms)
+2026-10-21T00:43:40.643Z PASS S0-I01-parse
+2026-10-21T00:43:40.644Z PASS unit-malformed-short
+2026-10-21T00:43:40.644Z PASS unit-malformed-upper
+2026-10-21T00:43:40.644Z PASS unit-malformed-prefix
+2026-10-21T00:43:40.644Z PASS unit-malformed-secret-length
+2026-10-21T00:43:40.644Z PASS unit-oversize
+2026-10-21T00:43:40.644Z PASS unit-hmac
+2026-10-21T00:43:40.644Z PASS unit-hmac-match
+2026-10-21T00:43:40.644Z PASS S0-I02-unit
+2026-10-21T00:43:40.644Z PASS unit-length-mismatch
+2026-10-21T00:43:40.644Z PASS unit-scope-ok
+2026-10-21T00:43:40.644Z PASS unit-scope-exact
+2026-10-21T00:43:40.644Z PASS unit-scope-star
+2026-10-21T00:43:40.644Z PASS S0-I04-unit-*
+2026-10-21T00:43:40.644Z PASS S0-I04-unit-agents:*
+2026-10-21T00:43:40.644Z PASS S0-I04-unit-organizations:read 
+2026-10-21T00:43:40.644Z PASS S0-I04-unit-empty
+2026-10-21T00:43:40.644Z PASS unit-active
+2026-10-21T00:43:40.644Z PASS unit-revoked
+2026-10-21T00:43:40.644Z PASS unit-expired
+2026-10-21T00:43:40.645Z PASS unit-redact-text
+2026-10-21T00:43:40.645Z PASS unit-redact-object
+2026-10-21T00:43:40.645Z PASS unit-header
+2026-10-21T00:43:40.645Z PASS unit-header-repeat
+2026-10-21T00:43:40.645Z PASS unit-header-missing
+2026-10-21T00:43:40.645Z PASS unit-envelope
+2026-10-21T00:43:40.645Z PASS unit-error-code
+2026-10-21T00:43:40.645Z PASS S0-I06-unit-missing
+2026-10-21T00:43:40.645Z PASS S0-I06-unit-weak
+2026-10-21T00:43:40.645Z PASS unit-pepper-ok
+2026-10-21T00:43:40.645Z PASS unit-config-dev
+2026-10-21T00:43:40.645Z PASS unit-config-cleartext
+2026-10-21T00:43:40.645Z PASS unit-config-trust-all
+✔ credential parser, HMAC, scopes, redaction, and config (2.442279ms)
+2026-10-21T00:43:40.711Z PASS S0-I06-process-missing
+2026-10-21T00:43:40.798Z PASS S0-I06-process-weak
+✔ S0-I06 process rejects a missing or weak pepper (152.15304ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4682.179866
+EXIT:0

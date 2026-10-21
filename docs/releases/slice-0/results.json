@@ -1,0 +1,424 @@
+{
+  "slice": "0",
+  "ci_job_url": null,
+  "ci_note": "not configured",
+  "commit_message": "Build tenant-safe FAD API foundation",
+  "commit_id_source": "git --no-replace-objects rev-parse HEAD",
+  "runtime": "node v24.22.0",
+  "image": "sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f",
+  "openapi_sha256": "bb5a6dc96ae93fb42ed6b69af1770cd435bba43809c8942b0702d9a748beb4cc",
+  "migration_0001_sha256": "09fb08e50ca20f3c1f18a32e93c03260f476c52816a976e1754a8b34505dc463",
+  "migration_0002_sha256": "2b8f86066af0b29968268db39ca3dd297677321339b947d46e46613f68811924",
+  "suite": {
+    "command": "docker run --rm --name fad-s0-image-suite --network fad-s0 --user node --group-add 991 -v /Users/nitin/Work/Y/fad/tests:/srv/fad/tests:ro -v /Users/nitin/Work/Y/fad/plans:/srv/fad/plans:ro -v /Users/nitin/Work/Y/fad/deploy:/srv/fad/deploy:ro -v /var/run/docker.sock:/var/run/docker.sock -v /Users/nitin/Work/Y/fad/.bin:/opt/dockerbin:ro -e NODE_ENV=development -e FAD_DEV_LOOPBACK_PUBLISH=true -e HOME=/tmp -e FAD_SCRATCH=/tmp/fad-scratch -e [redacted] -e [redacted] -e [redacted] -e [redacted] -w /srv/fad sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f sh -c mkdir -p /tmp/fad-scratch && cp /opt/dockerbin/docker /tmp/docker && chmod 755 /tmp/docker && export PATH=/tmp:$PATH && node -v && node --test --test-concurrency=1 --test-force-exit tests/contract.test.mjs tests/unit.test.mjs tests/db.test.mjs tests/http.test.mjs tests/sdk.test.mjs",
+    "image": "sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f",
+    "runtime": "node v24.22.0",
+    "result": "pass 6 fail 0",
+    "duration_ms": 4682.179866,
+    "exit": 0,
+    "evidence": "docs/releases/slice-0/coverage/node24-suite.log",
+    "note": "docker run image argument is sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f. Resolved id matched. Dist was not mounted."
+  },
+  "npm_audit": {
+    "command": "docker run --rm --user node --entrypoint npm -e HOME=/tmp sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f audit --omit=dev --json",
+    "image": "sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f",
+    "exit": 0,
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "dependencies": {
+      "prod": 77,
+      "dev": 4,
+      "optional": 1,
+      "peer": 0,
+      "peerOptional": 0,
+      "total": 81
+    },
+    "evidence": "docs/releases/slice-0/security-evidence/npm-audit-run.log",
+    "json": "docs/releases/slice-0/security-evidence/npm-audit.json"
+  },
+  "schema_backoff_proof": {
+    "runtime": "node v24.22.0",
+    "image_process": "sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f",
+    "dist": "image layers; tests mounted read-only; dist was not mounted",
+    "command": "node --test --test-concurrency=1 --test-force-exit tests/sdk.test.mjs tests/http.test.mjs",
+    "result": "pass 2 fail 0",
+    "duration_ms": 3789.255183,
+    "exit": 0,
+    "empty_migration_startup": "exit before listen; schema migration is missing",
+    "empty_migration_ready": "503 not_ready",
+    "empty_migration_current": "503 DEPENDENCY_UNAVAILABLE",
+    "checksum_mismatch_ready": "503 not_ready",
+    "checksum_mismatch_current": "503 DEPENDENCY_UNAVAILABLE",
+    "checksum_restored_ready": 200,
+    "checksum_restored_current": 200,
+    "sdk_backoff_low_ms": [
+      100,
+      200
+    ],
+    "sdk_backoff_high_ms": [
+      200,
+      400
+    ],
+    "sdk_retry_after_capped_ms": [
+      1000,
+      1000
+    ],
+    "sdk_retry_after_deadline_ms": [
+      2000
+    ],
+    "evidence": "docs/releases/slice-0/coverage/schema-and-backoff.log"
+  },
+  "performance": {
+    "path": "/v1/organizations/current",
+    "data": "one organization row, PostgreSQL 16 in Docker",
+    "concurrency": 8,
+    "requests": 40,
+    "statuses": {
+      "200": 40
+    },
+    "elapsed_ms": 59,
+    "p50_ms": 9.82,
+    "p95_ms": 22.85,
+    "hardware": "Darwin arm64 Mac16,10, 10 cores, 17179869184 bytes",
+    "server": "fad-api:local sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f node v24.22.0",
+    "client": "host node v25.1.0",
+    "availability_slo": "unmeasured",
+    "latency_slo": "unmeasured",
+    "rpo": "PITR drill archive lag 0.402 seconds; missing committed marker rows 0; product target not stated",
+    "rto": "PITR drill restore-to-ready 1.942 seconds; disaster-to-ready 2.199 seconds; product target not stated",
+    "evidence": "docs/releases/slice-0/coverage/load.log",
+    "note": "Measured on the rebuilt image after the two-replica journey. Not an SLO."
+  },
+  "tests": [
+    {
+      "id": "S0-A01",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-A01.log"
+      ]
+    },
+    {
+      "id": "S0-A02",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-A02.log"
+      ]
+    },
+    {
+      "id": "S0-A03",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-A03.log"
+      ]
+    },
+    {
+      "id": "S0-A04",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-A04.log"
+      ]
+    },
+    {
+      "id": "S0-A05",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-A05.log"
+      ]
+    },
+    {
+      "id": "S0-A06",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-A06.log"
+      ]
+    },
+    {
+      "id": "S0-A07",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-A07.log"
+      ]
+    },
+    {
+      "id": "S0-A08",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-A08.log"
+      ]
+    },
+    {
+      "id": "S0-A09",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-A09.log"
+      ]
+    },
+    {
+      "id": "S0-A10",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-A10.log"
+      ]
+    },
+    {
+      "id": "S0-A11",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-A11.log"
+      ]
+    },
+    {
+      "id": "S0-A12",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-A12.log"
+      ]
+    },
+    {
+      "id": "S0-A13",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-A13.log"
+      ]
+    },
+    {
+      "id": "S0-A14",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-A14.log"
+      ]
+    },
+    {
+      "id": "S0-D01",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-D01.log"
+      ]
+    },
+    {
+      "id": "S0-D02",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-D02.log"
+      ]
+    },
+    {
+      "id": "S0-D03",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-D03.log"
+      ]
+    },
+    {
+      "id": "S0-D04",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-D04.log"
+      ]
+    },
+    {
+      "id": "S0-D05",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-D05.log"
+      ]
+    },
+    {
+      "id": "S0-D06",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-D06.log"
+      ]
+    },
+    {
+      "id": "S0-D07",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-D07.log"
+      ]
+    },
+    {
+      "id": "S0-D08",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-D08.log"
+      ]
+    },
+    {
+      "id": "S0-D09",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-D09.log"
+      ]
+    },
+    {
+      "id": "S0-D10",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-D10.log"
+      ]
+    },
+    {
+      "id": "S0-D11",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-D11.log"
+      ]
+    },
+    {
+      "id": "S0-I01",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-I01.log"
+      ]
+    },
+    {
+      "id": "S0-I02",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-I02.log"
+      ]
+    },
+    {
+      "id": "S0-I03",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-I03.log"
+      ]
+    },
+    {
+      "id": "S0-I04",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-I04.log"
+      ]
+    },
+    {
+      "id": "S0-I05",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-I05.log"
+      ]
+    },
+    {
+      "id": "S0-I06",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-I06.log"
+      ]
+    },
+    {
+      "id": "S0-O01",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-O01.log"
+      ]
+    },
+    {
+      "id": "S0-O02",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-O02.log"
+      ]
+    },
+    {
+      "id": "S0-O03",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-O03.log"
+      ]
+    },
+    {
+      "id": "S0-O04",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-O04.log"
+      ]
+    },
+    {
+      "id": "S0-O05",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-O05.log"
+      ]
+    },
+    {
+      "id": "S0-O06",
+      "result": "pass",
+      "note": "WAL PITR. Archive lag 0.402 seconds. Restore-to-ready 1.942 seconds. Marker absent from base tar and present after recovery. Product RPO/RTO targets are not claimed.",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-O06.log"
+      ]
+    },
+    {
+      "id": "S0-O07",
+      "result": "pass",
+      "note": "Trivy 0.69.3 critical 0, secrets 0, high 60. CycloneDX SBOM 309 components. npm audit critical 0. docker scout did not run.",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-O07.log"
+      ]
+    },
+    {
+      "id": "S0-K01",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-K01.log"
+      ]
+    },
+    {
+      "id": "S0-K02",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-K02.log"
+      ]
+    },
+    {
+      "id": "S0-K03",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-K03.log"
+      ]
+    },
+    {
+      "id": "S0-K04",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-K04.log"
+      ]
+    },
+    {
+      "id": "S0-K05",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-K05.log"
+      ]
+    },
+    {
+      "id": "S0-C01",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-C01.log"
+      ]
+    },
+    {
+      "id": "S0-C02",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-C02.log"
+      ]
+    },
+    {
+      "id": "S0-C03",
+      "result": "pass",
+      "evidence": [
+        "docs/releases/slice-0/by-id/S0-C03.log"
+      ]
+    }
+  ]
+}

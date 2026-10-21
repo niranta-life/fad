@@ -1,0 +1,5 @@
+sdk-evidence/sdk-external.log
+PASS K02 059b581e-2145-476d-b5c5-4eb5b6eab527 v1 request ee0b927b-d924-46de-b31a-6ad265306af0
+PASS K02 059b581e-2145-476d-b5c5-4eb5b6eab527 v1 request 74e034f8-8cb0-47f5-8c4f-517bebe41d32
+coverage/sdk-node24-rerun.log
+2026-10-20T22:07:04.421Z PASS S0-K02

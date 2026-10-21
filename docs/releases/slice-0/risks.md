@@ -1,0 +1,9 @@
+# Slice 0 residual risks
+
+- WAL PITR was drilled on this host. Archive lag was 0.402 seconds and restore-to-ready was 1.942 seconds for a 22988-byte database. The post-backup marker was absent from the base tar and present after recovery. Product RPO and RTO targets are not stated in OPERATIONS.md and are not claimed. Log: `db-evidence/pitr.log`.
+- Trivy 0.69.3 scanned image `sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f` at 2026-10-21T00:32:51Z. Critical findings 0. Secret findings 0. High findings 60, including four Node package advisories. `docker scout` did not scan because the CLI is not logged in. `npm audit --omit=dev` used `docker run` with that same image argument and reported critical 0, high 0, moderate 0, low 0, info 0, and 77 production dependencies. Log: `security-evidence/trivy-run.log`, `security-evidence/npm-audit-run.log`, and `security-evidence/npm-audit.json`.
+- The unit-test pepper is a fixed fixture in `tests/unit.test.mjs`. The deployment pepper is not in the git tree. The image does not contain that fixture (`security-evidence/security-scan.log`).
+- Local Compose publishes cleartext on `127.0.0.1` with `NODE_ENV=development`. Production startup rejects that shape unless `FAD_INGRESS_TLS=terminated`, proxy trust, and `sslmode` are set. This release does not deploy that production ingress.
+- No CI job is configured. The six-test suite used `docker run` with image argument `sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f` and was 6 pass, 0 fail, 4682.179866 ms. Log: `coverage/node24-suite.log`. The journey on that image is `api-evidence/patched-journey.log` at 2026-10-21T00:32:31Z.
+- Two API replicas share one Postgres rate-limit table. A lost database fails calls closed with 503. There is no second rate-limit service.
+- Slice 1 agent routes are absent. The Slice 1 OpenAPI proposal was not edited and is not served.

@@ -1,0 +1,8 @@
+api-evidence/launch-1.json
+403 {"error":{"code":"FORBIDDEN","message":"Insufficient permission."},"meta":{"request_id":"bf945064-9fb6-4377-b3b6-0af105e7a8cb","api_version":"v1"}}
+api-evidence/patched-journey.log
+PASS S0-A10
+deployment-evidence/admin-cli.log
+noscope 403
+api-evidence/acceptance-smoke.log
+PASS no_scope HTTP

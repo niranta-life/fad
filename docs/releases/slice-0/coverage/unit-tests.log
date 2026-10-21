@@ -1,0 +1,96 @@
+Source: Node 24.22.0 suite node:lts-bookworm-slim. Log node24-suite.log. Secrets redacted. EXIT:0 tests 6 pass 6 fail 0.
+
+2026-10-20T21:59:39.916Z PASS S0-I01-parse
+2026-10-20T21:59:39.917Z PASS unit-malformed-short
+2026-10-20T21:59:39.917Z PASS unit-malformed-upper
+2026-10-20T21:59:39.917Z PASS unit-malformed-prefix
+2026-10-20T21:59:39.917Z PASS unit-malformed-secret-length
+2026-10-20T21:59:39.917Z PASS unit-oversize
+2026-10-20T21:59:39.917Z PASS unit-hmac
+2026-10-20T21:59:39.917Z PASS unit-hmac-match
+2026-10-20T21:59:39.917Z PASS S0-I02-unit
+2026-10-20T21:59:39.917Z PASS unit-length-mismatch
+2026-10-20T21:59:39.917Z PASS unit-scope-ok
+2026-10-20T21:59:39.917Z PASS unit-scope-exact
+2026-10-20T21:59:39.917Z PASS unit-scope-star
+2026-10-20T21:59:39.917Z PASS S0-I04-unit-*
+2026-10-20T21:59:39.917Z PASS S0-I04-unit-agents:*
+2026-10-20T21:59:39.917Z PASS S0-I04-unit-organizations:read 
+2026-10-20T21:59:39.917Z PASS S0-I04-unit-empty
+2026-10-20T21:59:39.917Z PASS unit-active
+2026-10-20T21:59:39.917Z PASS unit-revoked
+2026-10-20T21:59:39.917Z PASS unit-expired
+2026-10-20T21:59:39.917Z PASS unit-redact-text
+2026-10-20T21:59:39.917Z PASS unit-redact-object
+2026-10-20T21:59:39.917Z PASS unit-header
+2026-10-20T21:59:39.917Z PASS unit-header-repeat
+2026-10-20T21:59:39.917Z PASS unit-header-missing
+2026-10-20T21:59:39.917Z PASS unit-envelope
+2026-10-20T21:59:39.917Z PASS unit-error-code
+2026-10-20T21:59:39.917Z PASS S0-I06-unit-missing
+2026-10-20T21:59:39.918Z PASS S0-I06-unit-weak
+2026-10-20T21:59:39.918Z PASS unit-pepper-ok
+2026-10-20T21:59:39.918Z PASS unit-config-dev
+2026-10-20T21:59:39.918Z PASS unit-config-cleartext
+2026-10-20T21:59:39.918Z PASS unit-config-trust-all
+2026-10-20T21:59:40.064Z PASS S0-I06-process-missing
+2026-10-20T21:59:40.207Z PASS S0-I06-process-weak
+✔ S0-I06 process rejects a missing or weak pepper (289.23558ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6593.681323
+EXIT:0
+
+=== unknown unit fixture rerun inside image sha256:a2b2f64678d625de09682ba779d265f7ca8e90d6731db84ef628ff018614d67d ===
+command: node --test --test-concurrency=1 tests/unit.test.mjs
+runtime: node from fad-api:local
+2026-10-20T23:33:03.791Z PASS S0-I01-parse
+2026-10-20T23:33:03.791Z PASS unit-malformed-short
+2026-10-20T23:33:03.791Z PASS unit-malformed-upper
+2026-10-20T23:33:03.791Z PASS unit-malformed-prefix
+2026-10-20T23:33:03.791Z PASS unit-malformed-secret-length
+2026-10-20T23:33:03.791Z PASS unit-oversize
+2026-10-20T23:33:03.792Z PASS unit-hmac
+2026-10-20T23:33:03.792Z PASS unit-hmac-match
+2026-10-20T23:33:03.792Z PASS S0-I02-unit
+2026-10-20T23:33:03.792Z PASS unit-length-mismatch
+2026-10-20T23:33:03.792Z PASS unit-scope-ok
+2026-10-20T23:33:03.792Z PASS unit-scope-exact
+2026-10-20T23:33:03.792Z PASS unit-scope-star
+2026-10-20T23:33:03.792Z PASS S0-I04-unit-*
+2026-10-20T23:33:03.792Z PASS S0-I04-unit-agents:*
+2026-10-20T23:33:03.792Z PASS S0-I04-unit-organizations:read 
+2026-10-20T23:33:03.792Z PASS S0-I04-unit-empty
+2026-10-20T23:33:03.792Z PASS unit-active
+2026-10-20T23:33:03.792Z PASS unit-revoked
+2026-10-20T23:33:03.792Z PASS unit-expired
+2026-10-20T23:33:03.792Z PASS unit-redact-text
+2026-10-20T23:33:03.792Z PASS unit-redact-object
+2026-10-20T23:33:03.792Z PASS unit-header
+2026-10-20T23:33:03.792Z PASS unit-header-repeat
+2026-10-20T23:33:03.792Z PASS unit-header-missing
+2026-10-20T23:33:03.792Z PASS unit-envelope
+2026-10-20T23:33:03.792Z PASS unit-error-code
+2026-10-20T23:33:03.792Z PASS S0-I06-unit-missing
+2026-10-20T23:33:03.792Z PASS S0-I06-unit-weak
+2026-10-20T23:33:03.792Z PASS unit-pepper-ok
+2026-10-20T23:33:03.792Z PASS unit-config-dev
+2026-10-20T23:33:03.792Z PASS unit-config-cleartext
+2026-10-20T23:33:03.792Z PASS unit-config-trust-all
+✔ credential parser, HMAC, scopes, redaction, and config (1.805074ms)
+2026-10-20T23:33:03.857Z PASS S0-I06-process-missing
+2026-10-20T23:33:03.922Z PASS S0-I06-process-weak
+✔ S0-I06 process rejects a missing or weak pepper (129.740987ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 177.599335

@@ -1,0 +1,8 @@
+deployment-evidence/admin-cli.log
+fad-s0-proof-api-1
+exit 0
+fad-s0-proof-api-1
+api-evidence/patched-journey.log
+PASS S0-O03
+api-evidence/http-launch-2.log
+2026-10-20T21:59:38.990Z PASS S0-O03

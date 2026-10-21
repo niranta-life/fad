@@ -1,0 +1,30 @@
+=== 2026-10-20T21:57:02Z provision ===
+{"id":"059b581e-2145-476d-b5c5-4eb5b6eab527","name":"Compose Org A","status":"active","created_at":"2026-10-20T21:57:02.209Z"}
+{"id":"04935950-2b06-4f92-a2f4-5ca70d4d5ccb","name":"Compose Org B","status":"active","created_at":"2026-10-20T21:57:02.391Z"}
+Store this API key now. It will not be shown again.
+Store this API key now. It will not be shown again.
+Store this API key now. It will not be shown again.
+{"organization_id":"059b581e-2145-476d-b5c5-4eb5b6eab527","principal_id":"3402703f-158f-4e90-b4ff-7870dc0e64b5","credential_id":"61d2fdd5-e7be-4dcd-8ede-532ad635b5a1","kid":"9986cec65b63223305823f98bd54508a","api_key":"[redacted]","scopes":["organizations:read"],"status":"active","expires_at":null}
+{"organization_id":"04935950-2b06-4f92-a2f4-5ca70d4d5ccb","principal_id":"fca7498e-91c5-44ec-a942-1a85e17aa767","credential_id":"bf106047-8ef8-4ee9-9479-f2a0172a122a","kid":"e024388385e77efd79c66ace24c74362","api_key":"[redacted]","scopes":["organizations:read"],"status":"active","expires_at":null}
+orgA 059b581e-2145-476d-b5c5-4eb5b6eab527 orgB 04935950-2b06-4f92-a2f4-5ca70d4d5ccb
+=== list has no secret ===
+{"organization_id":"059b581e-2145-476d-b5c5-4eb5b6eab527","credentials":[{"kid":"2ec91a44a6ab95c3d1d11c5714d4d790","principal_id":"3402703f-158f-4e90-b4ff-7870dc0e64b5","scopes":["agents:read"],"status":"active","created_at":"2026-10-20T21:57:03.449Z","expires_at":null,"revoked_at":null},{"kid":"9986cec65b63223305823f98bd54508a","principal_id":"3402703f-158f-4e90-b4ff-7870dc0e64b5","scopes":["organizations:read"],"status":"active","created_at":"2026-10-20T21:57:03.078Z","expires_at":null,"revoked_at":null}]}
+=== second replica ===
+replica1 A {"data":{"id":"059b581e-2145-476d-b5c5-4eb5b6eab527","name":"Compose Org A","status":"active","created_at":"2026-10-20T21:57:02.209Z"},"meta":{"request_id":"09da303b-281d-48ee-bd7c-c752614e3aa5","api_version":"v1"}}
+replica2 B {"data":{"id":"04935950-2b06-4f92-a2f4-5ca70d4d5ccb","name":"Compose Org B","status":"active","created_at":"2026-10-20T21:57:02.391Z"},"meta":{"request_id":"4b0091b3-ae31-4564-85cb-d71569438aa0","api_version":"v1"}}
+replica2 A {"data":{"id":"059b581e-2145-476d-b5c5-4eb5b6eab527","name":"Compose Org A","status":"active","created_at":"2026-10-20T21:57:02.209Z"},"meta":{"request_id":"6d87eec6-84eb-46ef-bd4f-86fcd5e8b53d","api_version":"v1"}}
+noscope 403
+=== revoke ===
+Store this API key now. It will not be shown again.
+{"organization_id":"059b581e-2145-476d-b5c5-4eb5b6eab527","principal_id":"3402703f-158f-4e90-b4ff-7870dc0e64b5","credential_id":"e06ba164-79f5-4b46-bbd2-1c01b4af12fe","kid":"861db88ab38e479f7a22548931e6377c","api_key":"[redacted]","scopes":["organizations:read"],"status":"active","expires_at":null}
+{"kid":"9986cec65b63223305823f98bd54508a","status":"revoked"}
+old replica1 401
+old replica2 401
+new replica1 {"data":{"id":"059b581e-2145-476d-b5c5-4eb5b6eab527","name":"Compose Org A","status":"active","created_at":"2026-10-20T21:57:02.209Z"},"meta":{"request_id":"a52fb57c-b371-4126-90b4-e73cba36383a","api_version":"v1"}}
+new replica2 {"data":{"id":"059b581e-2145-476d-b5c5-4eb5b6eab527","name":"Compose Org A","status":"active","created_at":"2026-10-20T21:57:02.209Z"},"meta":{"request_id":"03ea26f2-82b9-4bb4-8592-c89eb3c6bec7","api_version":"v1"}}
+=== sigterm ===
+fad-s0-proof-api-1
+exit 0
+fad-s0-proof-api-1
+after restart {"data":{"id":"059b581e-2145-476d-b5c5-4eb5b6eab527","name":"Compose Org A","status":"active","created_at":"2026-10-20T21:57:02.209Z"},"meta":{"request_id":"97b7994c-be8a-4a5f-95c9-88a334b42632","api_version":"v1"}}
+revoked still 401

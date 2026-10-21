@@ -1,0 +1,6 @@
+coverage/node24-suite.log
+2026-10-20T23:09:25.937Z PASS S0-C03-identical
+openapi-diff.md
+No added, removed, or changed bytes. Health and GET /v1/organizations/current are unchanged.
+Paths only in that proposal: /v1/agents, /v1/agents/{agentId}, /v1/agents/{agentId}/activate, /v1/agents/{agentId}/retire, /v1/agents/{agentId}/suspend
+Slice 0 paths absent from that proposal: /health/live, /health/ready, /v1/organizations/current

@@ -1,0 +1,65 @@
+=== 2026-10-20T21:59:33Z backup ===
+dump_bytes    22988
+=== source counts ===
+ orgs | principals | credentials | audits | migrations 
+------+------------+-------------+--------+------------
+    2 |          2 |           4 |      9 |          2
+(1 row)
+
+     version     |                         checksum_sha256                          
+-----------------+------------------------------------------------------------------
+ 0001_foundation | 09fb08e50ca20f3c1f18a32e93c03260f476c52816a976e1754a8b34505dc463
+ 0002_rate_limit | 2b8f86066af0b29968268db39ca3dd297677321339b947d46e46613f68811924
+(2 rows)
+
+ status  | count 
+---------+-------
+ active  |     3
+ revoked |     1
+(2 rows)
+
+=== restore into clean postgres 16 ===
+/var/run/postgresql:5432 - no response
+/var/run/postgresql:5432 - accepting connections
+pg_restore: error: could not execute query: ERROR:  role "fad_app" does not exist
+Command was: CREATE POLICY audit_tenant ON public.audit_events TO fad_app USING ((organization_id = (NULLIF(current_setting('fad.org_id'::text, true), ''::text))::uuid)) WITH CHECK ((organization_id = (NULLIF(current_setting('fad.org_id'::text, true), ''::text))::uuid));
+
+
+=== 2026-10-20T21:59:52Z retry restore after roles ===
+DROP DATABASE
+CREATE DATABASE
+DO
+REVOKE
+GRANT
+GRANT
+restore_seconds 0
+=== restored counts ===
+ orgs | principals | credentials | audits | migrations 
+------+------------+-------------+--------+------------
+    2 |          2 |           4 |      9 |          2
+(1 row)
+
+     version     |                         checksum_sha256                          
+-----------------+------------------------------------------------------------------
+ 0001_foundation | 09fb08e50ca20f3c1f18a32e93c03260f476c52816a976e1754a8b34505dc463
+ 0002_rate_limit | 2b8f86066af0b29968268db39ca3dd297677321339b947d46e46613f68811924
+(2 rows)
+
+ status  | count 
+---------+-------
+ active  |     3
+ revoked |     1
+(2 rows)
+
+=== revoked kid survived ===
+               kid                | status  
+----------------------------------+---------
+ 9986cec65b63223305823f98bd54508a | revoked
+(1 row)
+
+RPO target: unmeasured
+RTO target: unmeasured
+Darwin arm64
+10
+17179869184
+Mac16,10

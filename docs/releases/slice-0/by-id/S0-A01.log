@@ -1,0 +1,12 @@
+deployment-evidence/patched-image.log
+live_http cache=no-store
+status=200
+live_body {"status":"ok"}
+api-evidence/patched-journey.log
+PASS S0-A01
+PASS S0-A01-replica
+api-evidence/launch-1.json
+200 {"status":"ok"}
+api-evidence/acceptance-smoke.log
+PASS live HTTP
+PASS liveness body

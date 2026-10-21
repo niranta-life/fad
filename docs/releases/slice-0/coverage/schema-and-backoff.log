@@ -1,0 +1,67 @@
+=== 2026-10-21T00:32:31Z schema and backoff inside image sha256:d2b388bf095974ce6028309c3918384c7d7b9570414c18fa0870340197fca49f ===
+command: node --test --test-concurrency=1 --test-force-exit tests/sdk.test.mjs tests/http.test.mjs
+dist: image layers. Tests were mounted read-only. Dist was not mounted.
+v24.22.0
+2026-10-21T00:32:32.026Z PASS S0-I01
+2026-10-21T00:32:32.027Z PASS S0-I01-audit
+2026-10-21T00:32:32.189Z PASS launch-1-up
+2026-10-21T00:32:32.193Z PASS launch-1-A01
+2026-10-21T00:32:32.198Z PASS launch-1-A02
+2026-10-21T00:32:32.205Z PASS S0-A04
+2026-10-21T00:32:32.208Z PASS S0-A05
+2026-10-21T00:32:32.211Z PASS S0-A06
+2026-10-21T00:32:32.213Z PASS S0-A07
+2026-10-21T00:32:32.219Z PASS S0-A08
+2026-10-21T00:32:32.222Z PASS S0-A10
+2026-10-21T00:32:32.223Z PASS S0-A13
+2026-10-21T00:32:32.223Z PASS launch-1-logs
+2026-10-21T00:32:32.226Z PASS launch-1-stop
+2026-10-21T00:32:32.373Z PASS launch-2-up
+2026-10-21T00:32:32.382Z PASS S0-A01
+2026-10-21T00:32:32.382Z PASS S0-A02
+2026-10-21T00:32:32.382Z PASS launch-2-org
+2026-10-21T00:32:32.439Z PASS S0-A09-expired
+2026-10-21T00:32:32.622Z PASS suspend
+2026-10-21T00:32:32.808Z PASS disable
+2026-10-21T00:32:32.811Z PASS S0-A11
+2026-10-21T00:32:32.815Z PASS S0-A12
+2026-10-21T00:32:32.924Z PASS S0-I03-cli
+2026-10-21T00:32:33.101Z PASS S0-A09
+2026-10-21T00:32:33.103Z PASS S0-O02
+2026-10-21T00:32:33.456Z PASS S0-A14
+2026-10-21T00:32:33.558Z PASS S0-A03-empty-startup
+{"level":30,"time":1792542753581,"pid":18,"hostname":"e677b268242d","msg":"Server listening at http://127.0.0.1:34299"}
+{"level":30,"time":1792542753621,"pid":18,"hostname":"e677b268242d","reqId":"76f0a44e-7366-4654-a5e3-430943ce722b","request_id":"76f0a44e-7366-4654-a5e3-430943ce722b","status":503,"method":"GET","path":"/health/ready","msg":"request"}
+{"level":30,"time":1792542753624,"pid":18,"hostname":"e677b268242d","reqId":"16386b02-3951-42bf-b6a6-8036998660a7","request_id":"16386b02-3951-42bf-b6a6-8036998660a7","status":503,"method":"GET","path":"/v1/organizations/current","msg":"request"}
+2026-10-21T00:32:33.626Z PASS S0-A03-empty-ready
+2026-10-21T00:32:33.829Z PASS S0-A03-schema
+S0-A03-schema ready 503 {"status":"not_ready"} current 503 {"error":{"code":"DEPENDENCY_UNAVAILABLE","message":"Service temporarily unavailable."},"meta":{"request_id":"eac4fc3f-aa3e-4954-ad91-caed4b0d62b8","api_version":"v1"}} restored-ready 200 restored-current 200
+2026-10-21T00:32:34.101Z PASS S0-A03
+2026-10-21T00:32:34.702Z PASS S0-O04
+2026-10-21T00:32:34.705Z PASS S0-O03
+2026-10-21T00:32:34.717Z PASS S0-O05-db
+✔ HTTP tenant boundary, credentials, replicas, and database outage (3214.332798ms)
+2026-10-21T00:32:34.832Z PASS S0-K03-retry
+2026-10-21T00:32:34.833Z PASS S0-K03-503
+2026-10-21T00:32:34.834Z PASS S0-K03-no-retry-401
+2026-10-21T00:32:34.843Z PASS sdk-backoff-exponential
+2026-10-21T00:32:34.845Z PASS sdk-backoff-cap
+sdk-backoff low 100,200 high 200,400 capped 1000,1000 deadline 2000
+2026-10-21T00:32:34.847Z PASS S0-K05
+2026-10-21T00:32:34.848Z PASS S0-K04
+2026-10-21T00:32:34.848Z PASS sdk-https
+2026-10-21T00:32:35.207Z PASS S0-K02
+2026-10-21T00:32:35.210Z PASS S0-K03-403
+2026-10-21T00:32:35.214Z PASS S0-K03-429
+2026-10-21T00:32:35.220Z PASS S0-K03-401
+2026-10-21T00:32:35.220Z PASS sdk-no-agents
+✔ SDK retries, cancellation, redirects, and the live API (409.601762ms)
+ℹ tests 2
+ℹ suites 0
+ℹ pass 2
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3789.255183
+EXIT:0

@@ -1,0 +1,127 @@
+=== PITR drill 2026-10-20T22:44:09Z ===
+image postgres:16@sha256:ca0bd484cb98bf4b24eb1010e73fb3fcbd6714d240fbc1a10eea5b7dbecb641d
+dump_bytes 22988
+hardware Darwin arm64 cores=10 mem=17179869184 model=Mac16,10
+command: isolated Postgres 16, wal_level=replica, archive_mode=on, pg_basebackup -Ft -X stream, stop primary, recover with recovery.signal and recovery_target_lsn
+=== 2026-10-20T22:44:09Z start primary ===
+=== 2026-10-20T22:44:11Z roles then pg_restore ===
+DO
+REVOKE
+GRANT
+GRANT
+=== source counts before base backup ===
+ orgs | principals | credentials | audits | migrations 
+------+------------+-------------+--------+------------
+    2 |          2 |           4 |      9 |          2
+(1 row)
+
+     version     |                         checksum_sha256                          
+-----------------+------------------------------------------------------------------
+ 0001_foundation | 09fb08e50ca20f3c1f18a32e93c03260f476c52816a976e1754a8b34505dc463
+ 0002_rate_limit | 2b8f86066af0b29968268db39ca3dd297677321339b947d46e46613f68811924
+(2 rows)
+
+ status  | count 
+---------+-------
+ active  |     3
+ revoked |     1
+(2 rows)
+
+               kid                | status  
+----------------------------------+---------
+ 9986cec65b63223305823f98bd54508a | revoked
+(1 row)
+
+audit_id_md5 b44a22517fea23a239c7d6a91b322b11
+ wal_level 
+-----------
+ replica
+(1 row)
+
+ archive_mode 
+--------------
+ on
+(1 row)
+
+ archived_count |    last_archived_wal     | last_failed_wal | last_failed_time 
+----------------+--------------------------+-----------------+------------------
+              1 | 000000010000000000000001 |                 | 
+(1 row)
+
+=== 2026-10-20T22:44:11Z pg_basebackup ===
+basebackup_seconds 0.457
+=== backup_label ===
+START WAL LOCATION: 0/3000028 (file 000000010000000000000003)
+CHECKPOINT LOCATION: 0/3000060
+BACKUP METHOD: streamed
+BACKUP FROM: primary
+START TIME: 2026-10-20 22:44:11 UTC
+LABEL: pg_basebackup base backup
+START TIMELINE: 1
+lsn_after_backup 0/4000000
+=== 2026-10-20T22:44:12Z post-backup marker then switch WAL ===
+CREATE TABLE
+INSERT 0 1
+recovery_target_lsn 0/4024CF8
+walfile 000000010000000000000004
+ pg_switch_wal 
+---------------
+ 0/4024D10
+(1 row)
+
+archive_lag_seconds 0.402
+ archived_count |    last_archived_wal     | failed_count | last_failed_wal 
+----------------+--------------------------+--------------+-----------------
+              5 | 000000010000000000000004 |            0 | 
+(1 row)
+
+archive_files 5
+marker_hits_in_base_tar 0
+marker_hits_in_archived_wal 1
+=== 2026-10-20T22:44:13Z stop primary (disaster) ===
+primary_stopped 2026-10-20T22:44:13Z
+=== 2026-10-20T22:44:13Z extract base backup into clean data directory ===
+=== 2026-10-20T22:44:14Z start recovery ===
+rto_restore_seconds 1.942
+rto_disaster_to_ready_seconds 2.199
+=== 2026-10-20T22:44:15Z recovered counts ===
+ in_recovery 
+-------------
+ f
+(1 row)
+
+ orgs | principals | credentials | audits | migrations 
+------+------------+-------------+--------+------------
+    2 |          2 |           4 |      9 |          2
+(1 row)
+
+     version     |                         checksum_sha256                          
+-----------------+------------------------------------------------------------------
+ 0001_foundation | 09fb08e50ca20f3c1f18a32e93c03260f476c52816a976e1754a8b34505dc463
+ 0002_rate_limit | 2b8f86066af0b29968268db39ca3dd297677321339b947d46e46613f68811924
+(2 rows)
+
+ status  | count 
+---------+-------
+ active  |     3
+ revoked |     1
+(2 rows)
+
+               kid                | status  
+----------------------------------+---------
+ 9986cec65b63223305823f98bd54508a | revoked
+(1 row)
+
+ id |         note          
+----+-----------------------
+  1 | wal-after-base-backup
+(1 row)
+
+restored_audit_id_md5 b44a22517fea23a239c7d6a91b322b11
+checksum_0001 09fb08e50ca20f3c1f18a32e93c03260f476c52816a976e1754a8b34505dc463
+checksum_0002 2b8f86066af0b29968268db39ca3dd297677321339b947d46e46613f68811924
+measured_rpo_missing_marker_rows 0
+product RPO/RTO numeric targets are not stated in OPERATIONS.md. SLO attainment is not claimed.
+measured archive lag and restore wall clock are above. Hardware is this host.
+PASS S0-O06
+=== PITR drill end 2026-10-20T22:44:16Z ===

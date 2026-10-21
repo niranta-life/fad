@@ -1,0 +1,9 @@
+deployment-evidence/patched-image.log
+ready_body status=200
+api-evidence/patched-journey.log
+PASS S0-A02
+api-evidence/launch-1.json
+200 {"status":"ready"}
+api-evidence/acceptance-smoke.log
+PASS ready HTTP
+PASS readiness body

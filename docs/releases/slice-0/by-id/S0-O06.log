@@ -1,0 +1,9 @@
+db-evidence/pitr.log
+  1 | wal-after-base-backup
+restored_audit_id_md5 b44a22517fea23a239c7d6a91b322b11
+checksum_0001 09fb08e50ca20f3c1f18a32e93c03260f476c52816a976e1754a8b34505dc463
+checksum_0002 2b8f86066af0b29968268db39ca3dd297677321339b947d46e46613f68811924
+measured_rpo_missing_marker_rows 0
+product RPO/RTO numeric targets are not stated in OPERATIONS.md. SLO attainment is not claimed.
+measured archive lag and restore wall clock are above. Hardware is this host.
+PASS S0-O06
