@@ -10,7 +10,7 @@ The service does three things:
 
 Each agent receives a stable id, a global URN of the form `urn:fad:agent:<organization-uuid>:<agent-uuid>`, and a revision. A real change writes an audit row. One organization cannot read or change another organization's agents. The directory records the agent. The agent process does its own work. A status of `active` is a directory fact, and another system still decides whether to call the agent.
 
-The repository contains a Node.js HTTP API, a PostgreSQL 16 database, the offline program `fad-admin`, the client `@fad/sdk` 0.2.0, and a container image with a local Docker Compose stack. The HTTP contract is `contracts/openapi.yaml`. The API version in every success and error body is `v1`.
+The repository contains a Node.js HTTP API, a PostgreSQL 16 database, the offline program `fad-admin`, the client `@fad/sdk` 0.3.0, and a container image with a local Docker Compose stack. The HTTP contract is `contracts/openapi.yaml`. The contract version is 1.2.0. The API version in every success and error body is `v1`.
 
 - [Server](#server) is for the administrator who runs the service and issues keys.
 - [Client](#client) is the call reference, with examples.
@@ -131,6 +131,16 @@ List with `GET /v1/agents`. Optional query fields are `status` (`active`, `suspe
 
 The default limit is 60 authenticated requests per key per 60 seconds. A limited call returns status 429 and `Retry-After`. Change the ceiling with `FAD_RATE_LIMIT_MAX` and `FAD_RATE_LIMIT_WINDOW_SECONDS`. `FAD_RATE_LIMIT_BACKEND` stays `postgres`.
 
+### Typed tags
+
+An administrator creates a typed tag definition. A service assigns that tag to an existing agent and searches agents by the tag value. A security administrator creates a governed tag. A service without `tags:governance` cannot change it. A service without `tags:restricted:read` cannot see it.
+
+Set `FAD_TAGS_ENABLED` to `true` to serve the tag routes. The default is off. The tag routes then answer 404. The agent routes stay the same. The agent record does not gain tag fields. A tag has its own ETag, `tag-vN`.
+
+Run the migration job before you enable the flag. To roll back, set the flag to `false` and deploy the previous API image. Do not drop the tag tables.
+
+Creating a definition requires `tags:define`. A governed or restricted definition also requires `tags:governance`. Assigning or removing a tag requires `tags:write`, and a governed tag also requires `tags:governance`. Reading tags requires `tags:read` together with `agents:read` for tags on an agent. Search with tag predicates requires `agents:read` and `tags:read`. A restricted predicate also requires `tags:restricted:read`. The reserved namespaces `security`, `compliance`, and `system` are governed and restricted.
+
 ### Rotate a key and stop a caller
 
 Issue the successor with the scopes that program needs. Store it, point the program at it, and call `GET /v1/organizations/current`. Then revoke the predecessor. Revoking a key that is already revoked succeeds and reports `already_revoked`.
@@ -174,7 +184,7 @@ The package builds for ESM and CommonJS and requires Node.js 22 or later. From a
 
 ```sh
 npm pack -w @fad/sdk
-npm install /path/to/fad-sdk-0.2.0.tgz
+npm install /path/to/fad-sdk-0.3.0.tgz
 ```
 
 Create one client for the life of the process. Pass the key through a function so a rotated secret is picked up on the next call. Use `credentialProvider` when you prefer that name. When both are set, `apiKey` is the one that is called.
@@ -326,6 +336,16 @@ The client retries a request at most twice (`maxGetRetries`, maximum 5) when the
 | `agents.suspend(agentId, { reason }, { idempotencyKey, ifMatch })` | `agents:lifecycle` | `POST /v1/agents/{agentId}/suspend` |
 | `agents.activate(agentId, { reason }, { idempotencyKey, ifMatch })` | `agents:lifecycle` | `POST /v1/agents/{agentId}/activate` |
 | `agents.retire(agentId, { reason }, { idempotencyKey, ifMatch })` | `agents:lifecycle` | `POST /v1/agents/{agentId}/retire` |
+| `agents.search(body)` | `agents:read` | `POST /v1/agents/search` |
+| `agents.iterateSearch(body)` | `agents:read` | `POST /v1/agents/search`, following `next_cursor` |
+| `tagDefinitions.create(body, { idempotencyKey })` | `tags:define` | `POST /v1/tag-definitions` |
+| `tagDefinitions.get(namespace, key)` | `tags:read` | `GET /v1/tag-definitions/{namespace}/{key}` |
+| `tagDefinitions.list(query)` | `tags:read` | `GET /v1/tag-definitions` |
+| `tagDefinitions.iterate(query)` | `tags:read` | `GET /v1/tag-definitions`, following `next_cursor` |
+| `agentTags.list(agentId)` | `agents:read` and `tags:read` | `GET /v1/agents/{agentId}/tags` |
+| `agentTags.get(agentId, namespace, key)` | `agents:read` and `tags:read` | `GET /v1/agents/{agentId}/tags/{namespace}/{key}` |
+| `agentTags.put(agentId, namespace, key, body, { idempotencyKey, ifMatch or ifNoneMatch })` | `tags:write` | `PUT /v1/agents/{agentId}/tags/{namespace}/{key}` |
+| `agentTags.delete(agentId, namespace, key, { idempotencyKey, ifMatch })` | `tags:write` | `DELETE /v1/agents/{agentId}/tags/{namespace}/{key}` |
 
 ## Use the client in an agent
 
