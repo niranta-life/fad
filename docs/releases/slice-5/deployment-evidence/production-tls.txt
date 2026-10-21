@@ -1,0 +1,10 @@
+Checked at 2026-10-21T21:54:09.079Z.
+Image fad-api:slice5. Container 8ef16ca67e0c. Host port 56684.
+NODE_ENV=production, FAD_INGRESS_TLS=terminated, FAD_TRUST_PROXY=true, sslmode=require.
+The image default FAD_POLICIES_ENABLED=false was not overridden.
+
+Result: BLOCKED. The container exited 1. /health/live did not become ready (wait 12154 ms, fetch failed).
+Startup log: {"error":{"code":"STARTUP","message":"The server does not support SSL connections"}}
+
+The local Postgres in fad-s0-pg does not speak TLS. This is not a policy-route result.
+The flag-off smoke in flag-off.json used NODE_ENV=development and cleartext on the same image and database.

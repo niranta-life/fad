@@ -26,6 +26,7 @@ export const ERRORS = {
   ENDPOINT_NOT_FOUND: 'Endpoint not found.',
   BINDING_NOT_FOUND: 'Binding not found.',
   INVALID_CURSOR: 'Cursor is invalid.',
+  CONFLICT: 'The request conflicts with the current state.',
 } as const;
 
 export type ErrorCode = keyof typeof ERRORS;

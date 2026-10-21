@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Federated Agent Directory API
-  version: 1.4.0
+  version: 1.5.0
   description: |
     Normative public HTTP contract. Header authentication with X-FAD-API-Key
     is scoped to a single organization and principal. A supplied
@@ -14,7 +14,10 @@ info:
     Slice 3 operations. A deployment serves those routes only when Slice 3
     is enabled. Discovery does not claim that an agent is healthy, trusted,
     or authorized for invocation. MCP at /mcp is an additive protocol. It
-    does not change /v1.
+    does not change /v1. Policy management and hypothetical evaluation are
+    additive Slice 5 operations. A deployment serves those routes only when
+    policies are enabled. An evaluation result is not enforcement and does
+    not authorize invocation.
 servers:
   - url: https://fad.example.internal
 security:
@@ -29,6 +32,8 @@ tags:
   - name: Bindings
   - name: Discovery
   - name: MCP
+  - name: Policies
+  - name: PolicyEvaluation
 paths:
   /health/live:
     get:
@@ -1068,6 +1073,230 @@ paths:
                   bearer_methods_supported:
                     type: array
                     items: { type: string }
+  /v1/policies:
+    post:
+      tags: [Policies]
+      operationId: createPolicy
+      summary: Create a draft policy; does not enforce or activate it
+      description: |
+        Requires policies:write. Validates referenced same-tenant principals,
+        agents, and tag definitions. A restricted selector requires
+        tags:restricted:read. The draft is not used by evaluation.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PolicyDefinitionInput' }
+      responses:
+        '201':
+          description: Draft created
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/PolicyETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    get:
+      tags: [Policies]
+      operationId: listPolicies
+      summary: List visible policies in the authenticated tenant
+      description: |
+        Requires policies:read. Policies that select a restricted tag are
+        omitted unless the caller also has tags:restricted:read. The page
+        does not report a count of omitted policies.
+      parameters:
+        - $ref: '#/components/parameters/PolicyStatusFilter'
+        - $ref: '#/components/parameters/PolicyLimit'
+        - $ref: '#/components/parameters/PolicyCursor'
+      responses:
+        '200':
+          description: Visible policy page
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/policies/{policyId}:
+    get:
+      tags: [Policies]
+      operationId: getPolicy
+      summary: Get one visible policy
+      description: |
+        Requires policies:read. A restricted policy without
+        tags:restricted:read is the same 404 as a missing policy.
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+      responses:
+        '200':
+          description: Policy
+          headers:
+            ETag: { $ref: '#/components/headers/PolicyETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    put:
+      tags: [Policies]
+      operationId: updateDraftPolicy
+      summary: Replace an entire draft policy with a new immutable revision
+      description: |
+        Requires policies:write, Idempotency-Key, and If-Match. Only a draft
+        can be replaced. The previous revision snapshot stays intact.
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/PolicyIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PolicyDefinitionInput' }
+      responses:
+        '200':
+          description: Draft revision committed
+          headers:
+            ETag: { $ref: '#/components/headers/PolicyETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/policies/{policyId}/activate:
+    post:
+      tags: [Policies]
+      operationId: activatePolicy
+      summary: Activate an immutable draft policy
+      description: |
+        Requires policies:write and policies:activate, a strong If-Match, and
+        Idempotency-Key. Activation does not change authorization of existing
+        REST or MCP operations.
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/PolicyIfMatch'
+      responses:
+        '200':
+          description: Policy activated
+          headers:
+            ETag: { $ref: '#/components/headers/PolicyETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/policies/{policyId}/disable:
+    post:
+      tags: [Policies]
+      operationId: disablePolicy
+      summary: Disable an active policy for later evaluations
+      description: |
+        Requires policies:write and policies:activate. Valid only from active.
+        Disabling does not change previous decision records.
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/PolicyIfMatch'
+      responses:
+        '200':
+          description: Policy disabled
+          headers:
+            ETag: { $ref: '#/components/headers/PolicyETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/authorization/evaluate:
+    post:
+      tags: [PolicyEvaluation]
+      operationId: evaluateAgentAccess
+      summary: Evaluate hypothetical agent access; the result is not enforced
+      description: |
+        Requires agents:read and either policies:evaluate:self for the caller's
+        own subject or policies:evaluate:any for another subject. The decision
+        is recorded and returned. It does not invoke an agent and does not
+        change authorization of any existing operation. Caller-supplied tag
+        values and principal state are rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EvaluationRequest' }
+      responses:
+        '200':
+          description: Durably recorded evaluation
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EvaluationResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
 components:
   securitySchemes:
     FadApiKey:
@@ -1198,6 +1427,32 @@ components:
       in: query
       required: false
       schema: { $ref: '#/components/schemas/CapabilityId' }
+    PolicyIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong policy ETag such as "policy-v2". Weak tags and wildcards are rejected.
+      schema: { type: string, pattern: '^"policy-v[1-9][0-9]*"$' }
+    PolicyId:
+      name: policyId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PolicyStatusFilter:
+      name: status
+      in: query
+      required: false
+      schema: { $ref: '#/components/schemas/PolicyStatus' }
+    PolicyLimit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    PolicyCursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, minLength: 1, maxLength: 4096 }
   headers:
     RequestId:
       description: Unique server-generated request correlation UUID.
@@ -1235,6 +1490,9 @@ components:
     EndpointETag:
       description: Strong ETag for an endpoint. It does not change the agent ETag.
       schema: { type: string, pattern: '^"endpoint-v[1-9][0-9]*"$' }
+    PolicyETag:
+      description: Strong ETag for this policy representation. It does not change an agent ETag.
+      schema: { type: string, pattern: '^"policy-v[1-9][0-9]*"$' }
   schemas:
     Liveness:
       type: object
@@ -1725,6 +1983,211 @@ components:
           type: array
           items: { $ref: '#/components/schemas/DiscoveryMatch' }
         meta: { $ref: '#/components/schemas/PageMeta' }
+    PolicyAction:
+      type: string
+      enum: [agent.read, agent.discover, agent.invoke, agent.update, agent.suspend]
+    PolicyEffect:
+      type: string
+      enum: [allow, deny]
+    PolicyStatus:
+      type: string
+      enum: [draft, active, disabled]
+    PolicyTagPredicate:
+      type: object
+      additionalProperties: false
+      required: [namespace, key, operator, value]
+      properties:
+        namespace: { type: string, pattern: '^[a-z][a-z0-9_-]{0,39}$' }
+        key: { type: string, pattern: '^[a-z][a-z0-9_-]{0,39}$' }
+        operator: { type: string, const: eq }
+        value:
+          oneOf:
+            - { type: string, minLength: 1, maxLength: 128 }
+            - { type: integer, minimum: -1000000000, maximum: 1000000000 }
+            - { type: boolean }
+    PolicySubjects:
+      type: object
+      additionalProperties: false
+      required: [principal_ids]
+      properties:
+        principal_ids:
+          type: array
+          minItems: 1
+          maxItems: 64
+          uniqueItems: true
+          items: { type: string, format: uuid }
+    PolicyResourceSelector:
+      type: object
+      additionalProperties: false
+      required: [type]
+      anyOf:
+        - { required: [agent_ids] }
+        - { required: [tags_all] }
+      properties:
+        type: { const: agent }
+        agent_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        tags_all:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items: { $ref: '#/components/schemas/PolicyTagPredicate' }
+    PolicyDefinitionInput:
+      type: object
+      additionalProperties: false
+      required: [name, effect, actions, subjects, resource]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: string, maxLength: 2000, default: '' }
+        effect: { $ref: '#/components/schemas/PolicyEffect' }
+        actions:
+          type: array
+          minItems: 1
+          maxItems: 5
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/PolicyAction' }
+        subjects: { $ref: '#/components/schemas/PolicySubjects' }
+        resource: { $ref: '#/components/schemas/PolicyResourceSelector' }
+        supersedes_policy_id:
+          oneOf:
+            - { type: string, format: uuid }
+            - { type: 'null' }
+          description: Optional same-tenant policy id. It does not disable that policy.
+    Policy:
+      type: object
+      additionalProperties: false
+      required: [id, organization_id, name, description, effect, actions, subjects, resource, status, revision, contains_restricted_tags, supersedes_policy_id, created_at, updated_at, activated_at, disabled_at, created_by, updated_by]
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        effect: { $ref: '#/components/schemas/PolicyEffect' }
+        actions:
+          type: array
+          items: { $ref: '#/components/schemas/PolicyAction' }
+        subjects: { $ref: '#/components/schemas/PolicySubjects' }
+        resource: { $ref: '#/components/schemas/PolicyResourceSelector' }
+        status: { $ref: '#/components/schemas/PolicyStatus' }
+        revision: { type: integer, minimum: 1 }
+        contains_restricted_tags: { type: boolean }
+        supersedes_policy_id:
+          oneOf:
+            - { type: string, format: uuid }
+            - { type: 'null' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        activated_at:
+          oneOf:
+            - { type: string, format: date-time }
+            - { type: 'null' }
+        disabled_at:
+          oneOf:
+            - { type: string, format: date-time }
+            - { type: 'null' }
+        created_by: { type: string, format: uuid }
+        updated_by: { type: string, format: uuid }
+    PolicyResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Policy' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    PolicyPage:
+      type: object
+      additionalProperties: false
+      required: [next_cursor]
+      properties:
+        next_cursor:
+          type: [string, 'null']
+    PolicyListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, page, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Policy' }
+        page: { $ref: '#/components/schemas/PolicyPage' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    EvaluationSubject:
+      type: object
+      additionalProperties: false
+      required: [principal_id]
+      properties:
+        principal_id: { type: string, format: uuid }
+    EvaluationResource:
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type: { const: agent }
+        id: { type: string, format: uuid }
+    EvaluationContext:
+      type: object
+      additionalProperties: false
+      description: Correlation metadata only. It is not a policy input.
+      properties:
+        purpose: { type: string, minLength: 1, maxLength: 100 }
+        correlation_id: { type: string, minLength: 1, maxLength: 128 }
+    EvaluationRequest:
+      type: object
+      additionalProperties: false
+      required: [subject, action, resource]
+      properties:
+        subject: { $ref: '#/components/schemas/EvaluationSubject' }
+        action: { $ref: '#/components/schemas/PolicyAction' }
+        resource: { $ref: '#/components/schemas/EvaluationResource' }
+        context: { $ref: '#/components/schemas/EvaluationContext' }
+    PolicyMatch:
+      type: object
+      additionalProperties: false
+      required: [policy_id, revision, effect]
+      properties:
+        policy_id: { type: string, format: uuid }
+        revision: { type: integer, minimum: 1 }
+        effect: { $ref: '#/components/schemas/PolicyEffect' }
+    EvaluationDecision:
+      type: object
+      additionalProperties: false
+      required: [decision_id, decision, reason_code, enforcement, evaluated_at, resource_revision]
+      properties:
+        decision_id: { type: string, format: uuid }
+        decision: { type: string, enum: [allow, deny] }
+        reason_code:
+          type: string
+          enum: [EXPLICIT_ALLOW, EXPLICIT_DENY, NO_MATCHING_ALLOW, SUBJECT_INACTIVE, RESOURCE_INACTIVE]
+        enforcement: { const: not_enforced }
+        evaluated_at: { type: string, format: date-time }
+        resource_revision: { type: integer, minimum: 1 }
+        policy_set_digest:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Omitted unless the caller may explain every considered policy.
+        input_digest:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Omitted unless the caller may explain every considered policy.
+        matched_policy_count:
+          type: integer
+          minimum: 0
+          description: Omitted rather than reveal a restricted match to a low-privilege caller.
+        explanation:
+          type: array
+          description: Omitted unless the caller has policies:explain and may read every restricted selector.
+          items: { $ref: '#/components/schemas/PolicyMatch' }
+    EvaluationResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/EvaluationDecision' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
   responses:
     HealthUnavailable:
       description: Process is not ready to serve traffic

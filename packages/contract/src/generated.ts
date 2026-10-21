@@ -313,3 +313,117 @@ export interface DiscoveryResponse {
   meta: PageMeta;
 }
 
+export type PolicyAction = "agent.read" | "agent.discover" | "agent.invoke" | "agent.update" | "agent.suspend";
+
+export type PolicyEffect = "allow" | "deny";
+
+export type PolicyStatus = "draft" | "active" | "disabled";
+
+export interface PolicyTagPredicate {
+  namespace: string;
+  key: string;
+  operator: "eq";
+  value: unknown;
+}
+
+export interface PolicySubjects {
+  principal_ids: string[];
+}
+
+export interface PolicyResourceSelector {
+  type: "agent";
+  agent_ids?: string[];
+  tags_all?: PolicyTagPredicate[];
+}
+
+export interface PolicyDefinitionInput {
+  name: string;
+  description?: string;
+  effect: PolicyEffect;
+  actions: PolicyAction[];
+  subjects: PolicySubjects;
+  resource: PolicyResourceSelector;
+  supersedes_policy_id?: unknown;
+}
+
+export interface Policy {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string;
+  effect: PolicyEffect;
+  actions: PolicyAction[];
+  subjects: PolicySubjects;
+  resource: PolicyResourceSelector;
+  status: PolicyStatus;
+  revision: number;
+  contains_restricted_tags: boolean;
+  supersedes_policy_id: unknown;
+  created_at: string;
+  updated_at: string;
+  activated_at: unknown;
+  disabled_at: unknown;
+  created_by: string;
+  updated_by: string;
+}
+
+export interface PolicyResponse {
+  data: Policy;
+  meta: ResponseMeta;
+}
+
+export interface PolicyPage {
+  next_cursor: string | null;
+}
+
+export interface PolicyListResponse {
+  data: Policy[];
+  page: PolicyPage;
+  meta: ResponseMeta;
+}
+
+export interface EvaluationSubject {
+  principal_id: string;
+}
+
+export interface EvaluationResource {
+  type: "agent";
+  id: string;
+}
+
+export interface EvaluationContext {
+  purpose?: string;
+  correlation_id?: string;
+}
+
+export interface EvaluationRequest {
+  subject: EvaluationSubject;
+  action: PolicyAction;
+  resource: EvaluationResource;
+  context?: EvaluationContext;
+}
+
+export interface PolicyMatch {
+  policy_id: string;
+  revision: number;
+  effect: PolicyEffect;
+}
+
+export interface EvaluationDecision {
+  decision_id: string;
+  decision: "allow" | "deny";
+  reason_code: "EXPLICIT_ALLOW" | "EXPLICIT_DENY" | "NO_MATCHING_ALLOW" | "SUBJECT_INACTIVE" | "RESOURCE_INACTIVE";
+  enforcement: "not_enforced";
+  evaluated_at: string;
+  resource_revision: number;
+  policy_set_digest?: string;
+  input_digest?: string;
+  matched_policy_count?: number;
+  explanation?: PolicyMatch[];
+}
+
+export interface EvaluationResponse {
+  data: EvaluationDecision;
+  meta: ResponseMeta;
+}
+

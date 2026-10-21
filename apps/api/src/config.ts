@@ -44,6 +44,8 @@ export interface AppConfig {
   endpointWriteBodyMaxBytes: number;
   bindingWriteBodyMaxBytes: number;
   discoveryBodyMaxBytes: number;
+  policiesEnabled: boolean;
+  policyWriteBodyMaxBytes: number;
   mcp: McpConfig;
 }
 
@@ -190,6 +192,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     endpointWriteBodyMaxBytes: integer('FAD_ENDPOINT_WRITE_BODY_MAX_BYTES', 4096, 1, 4096, env),
     bindingWriteBodyMaxBytes: integer('FAD_BINDING_WRITE_BODY_MAX_BYTES', 4096, 1, 4096, env),
     discoveryBodyMaxBytes: integer('FAD_DISCOVERY_BODY_MAX_BYTES', 16_384, 1, 16_384, env),
+    policiesEnabled: env.FAD_POLICIES_ENABLED === 'true',
+    policyWriteBodyMaxBytes: integer('FAD_POLICY_WRITE_BODY_MAX_BYTES', 65_536, 1, 65_536, env),
     mcp,
   };
 }

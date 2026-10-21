@@ -5,6 +5,7 @@ import {
   BINDING_ETAG,
   ENDPOINT_ETAG,
   IdempotencyConflictError,
+  PolicyServiceError,
   Slice3ServiceError,
   TagServiceError,
   agentEtag,
@@ -25,6 +26,13 @@ import {
   parseSlice3Precondition,
   parseTagPrecondition,
   parseTagPut,
+  activatePolicy,
+  createPolicy,
+  disablePolicy,
+  evaluateAgentAccess,
+  getPolicy,
+  listPolicies,
+  updateDraftPolicy,
   publishCapability,
   putAgentTag,
   putBinding,
@@ -186,6 +194,56 @@ const discoverSchema = z.strictObject({
     cursor: cursor.optional(),
   }),
 });
+const policyAction = z.enum(['agent.read', 'agent.discover', 'agent.invoke', 'agent.update', 'agent.suspend']);
+const policyPredicate = z.strictObject({
+  namespace: z.string().min(1).max(40),
+  key: z.string().min(1).max(40),
+  operator: z.literal('eq'),
+  value: tagValue,
+});
+const policyDefinition = z.strictObject({
+  name: z.string().min(1).max(160),
+  description: z.string().max(2000).optional(),
+  effect: z.enum(['allow', 'deny']),
+  actions: z.array(policyAction).min(1).max(5),
+  subjects: z.strictObject({ principal_ids: z.array(uuid).min(1).max(64) }),
+  resource: z.strictObject({
+    type: z.literal('agent'),
+    agent_ids: z.array(uuid).min(1).max(100).optional(),
+    tags_all: z.array(policyPredicate).min(1).max(8).optional(),
+  }),
+  supersedes_policy_id: z.union([uuid, z.null()]).optional(),
+});
+const listPoliciesSchema = z.strictObject({
+  status: z.enum(['draft', 'active', 'disabled']).optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+  cursor: cursor.optional(),
+});
+const policyIdSchema = z.strictObject({ policy_id: uuid });
+const createPolicySchema = z.strictObject({
+  definition: policyDefinition,
+  idempotency_key: IDEM,
+});
+const updatePolicySchema = z.strictObject({
+  policy_id: uuid,
+  definition: policyDefinition,
+  if_match: z.string().min(1).max(100),
+  idempotency_key: IDEM,
+});
+const policyTransitionSchema = z.strictObject({
+  policy_id: uuid,
+  if_match: z.string().min(1).max(100),
+  idempotency_key: IDEM,
+});
+const evaluateSchema = z.strictObject({
+  subject: z.strictObject({ principal_id: uuid }),
+  action: policyAction,
+  resource: z.strictObject({ type: z.literal('agent'), id: uuid }),
+  context: z.strictObject({
+    purpose: z.string().min(1).max(100).optional(),
+    correlation_id: z.string().min(1).max(128).optional(),
+  }).optional(),
+});
 
 interface ToolSpec {
   name: ApprovedMcpTool;
@@ -194,7 +252,7 @@ interface ToolSpec {
   scopes: readonly KnownScope[];
   readOnly: boolean;
   schema: z.ZodType;
-  feature: 'agent' | 'tags' | 'slice3';
+  feature: 'agent' | 'tags' | 'slice3' | 'policy';
 }
 
 const TOOLS: readonly ToolSpec[] = [
@@ -212,12 +270,24 @@ const TOOLS: readonly ToolSpec[] = [
   { name: 'fad_put_endpoint', title: 'Put endpoint', description: 'Declare an HTTPS endpoint. The service does not call the URL.', scopes: ['endpoints:write'], readOnly: false, schema: putEndpointSchema, feature: 'slice3' },
   { name: 'fad_put_binding', title: 'Put binding', description: 'Bind a published capability version to an endpoint on the same agent.', scopes: ['capabilities:write'], readOnly: false, schema: putBindingSchema, feature: 'slice3' },
   { name: 'fad_discover_agents', title: 'Discover agents', description: 'List local matches. verification is self_declared. availability is not_checked. invocation_authorization is not_evaluated.', scopes: ['agents:read', 'capabilities:read', 'endpoints:read'], readOnly: true, schema: discoverSchema, feature: 'slice3' },
+  { name: 'fad_list_policies', title: 'List policies', description: 'List visible policies. Restricted policies stay hidden without tags:restricted:read.', scopes: ['policies:read'], readOnly: true, schema: listPoliciesSchema, feature: 'policy' },
+  { name: 'fad_get_policy', title: 'Get policy', description: 'Read one visible policy.', scopes: ['policies:read'], readOnly: true, schema: policyIdSchema, feature: 'policy' },
+  { name: 'fad_create_policy', title: 'Create policy', description: 'Create a draft policy. This does not activate or enforce it.', scopes: ['policies:write'], readOnly: false, schema: createPolicySchema, feature: 'policy' },
+  { name: 'fad_update_draft_policy', title: 'Update draft policy', description: 'Replace a draft policy. Requires if_match and idempotency_key.', scopes: ['policies:write'], readOnly: false, schema: updatePolicySchema, feature: 'policy' },
+  { name: 'fad_activate_policy', title: 'Activate policy', description: 'Activate a draft. Requires policies:write and policies:activate. This does not enforce the policy.', scopes: ['policies:write', 'policies:activate'], readOnly: false, schema: policyTransitionSchema, feature: 'policy' },
+  { name: 'fad_disable_policy', title: 'Disable policy', description: 'Disable an active policy for later evaluations. Previous decision rows stay.', scopes: ['policies:write', 'policies:activate'], readOnly: false, schema: policyTransitionSchema, feature: 'policy' },
+  { name: 'fad_evaluate_access', title: 'Evaluate access', description: 'Record a hypothetical decision. enforcement is not_enforced. This does not invoke an agent.', scopes: ['agents:read'], readOnly: false, schema: evaluateSchema, feature: 'policy' },
 ];
 
 function allowed(config: AppConfig, scopes: readonly string[], spec: ToolSpec): boolean {
   if (spec.feature === 'tags' && !config.tagsEnabled) return false;
   if (spec.feature === 'slice3' && !config.slice3Enabled) return false;
+  if (spec.feature === 'policy' && !config.policiesEnabled) return false;
   if (config.mcp.toolset && !config.mcp.toolset.has(spec.name)) return false;
+  if (spec.name === 'fad_evaluate_access') {
+    return hasScope(scopes, 'agents:read')
+      && (hasScope(scopes, 'policies:evaluate:self') || hasScope(scopes, 'policies:evaluate:any'));
+  }
   return spec.scopes.every((scope) => hasScope(scopes, scope));
 }
 
@@ -297,7 +367,7 @@ function fail(requestId: string, error: unknown, log: McpToolDeps['log']): ToolB
     log.info({ metric: 'mcp_tool_denied', code: error.code }, 'mcp');
     return mapFailure(requestId, error.status, error.code);
   }
-  if (error instanceof AgentServiceError || error instanceof TagServiceError || error instanceof Slice3ServiceError) {
+  if (error instanceof AgentServiceError || error instanceof TagServiceError || error instanceof Slice3ServiceError || error instanceof PolicyServiceError) {
     if (error.status === 403 || error.status === 401) log.info({ metric: 'mcp_tool_denied', code: error.code }, 'mcp');
     return mapFailure(requestId, error.status, error.code);
   }
@@ -484,6 +554,61 @@ async function runTool(deps: McpToolDeps, spec: ToolSpec, token: string, request
         sliceLimits,
       );
       return toolResult(envelope(requestId, result.binding ?? null, { etag: result.etag }));
+    }
+    if (spec.name === 'fad_list_policies') {
+      const parsed = listPoliciesSchema.parse(args);
+      const query: Record<string, string> = {};
+      if (parsed.status) query.status = parsed.status;
+      if (parsed.limit !== undefined) query.limit = String(parsed.limit);
+      if (parsed.cursor) query.cursor = parsed.cursor;
+      const page = await listPolicies(deps.pool, scoped(principal, requestId), query, deps.config.pepper);
+      return toolResult({
+        data: page.policies,
+        page: { next_cursor: page.nextCursor },
+        meta: { request_id: requestId, api_version: API_VERSION },
+      });
+    }
+    if (spec.name === 'fad_get_policy') {
+      const parsed = policyIdSchema.parse(args);
+      const loaded = await getPolicy(deps.pool, scoped(principal, requestId), parsed.policy_id);
+      return toolResult(envelope(requestId, loaded.policy, { etag: loaded.etag }));
+    }
+    if (spec.name === 'fad_create_policy') {
+      const parsed = createPolicySchema.parse(args);
+      parseIdempotencyKey(parsed.idempotency_key);
+      const result = await createPolicy(deps.pool, scoped(principal, requestId), parsed.idempotency_key, parsed.definition);
+      return toolResult(envelope(requestId, result.policy, { etag: result.etag }));
+    }
+    if (spec.name === 'fad_update_draft_policy') {
+      const parsed = updatePolicySchema.parse(args);
+      parseIdempotencyKey(parsed.idempotency_key);
+      const result = await updateDraftPolicy(
+        deps.pool,
+        scoped(principal, requestId),
+        parsed.policy_id,
+        parsed.idempotency_key,
+        parsed.if_match,
+        parsed.definition,
+      );
+      return toolResult(envelope(requestId, result.policy, { etag: result.etag }));
+    }
+    if (spec.name === 'fad_activate_policy' || spec.name === 'fad_disable_policy') {
+      const parsed = policyTransitionSchema.parse(args);
+      parseIdempotencyKey(parsed.idempotency_key);
+      const command = spec.name === 'fad_activate_policy' ? activatePolicy : disablePolicy;
+      const result = await command(
+        deps.pool,
+        scoped(principal, requestId),
+        parsed.policy_id,
+        parsed.idempotency_key,
+        parsed.if_match,
+      );
+      return toolResult(envelope(requestId, result.policy, { etag: result.etag }));
+    }
+    if (spec.name === 'fad_evaluate_access') {
+      const parsed = evaluateSchema.parse(args);
+      const result = await evaluateAgentAccess(deps.pool, scoped(principal, requestId), parsed);
+      return toolResult(envelope(requestId, result.body));
     }
     const parsed = discoverSchema.parse(args);
     if (parsed.query.tags && !hasScope(principal.scopes, 'tags:read')) throw new ToolDenied(403, 'FORBIDDEN');

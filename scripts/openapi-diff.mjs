@@ -40,6 +40,15 @@ const MCP_OPERATIONS = [
   ['delete', '/mcp'],
   ['get', '/.well-known/oauth-protected-resource/mcp'],
 ];
+const POLICY_OPERATIONS = [
+  ['post', '/v1/policies'],
+  ['get', '/v1/policies'],
+  ['get', '/v1/policies/{policyId}'],
+  ['put', '/v1/policies/{policyId}'],
+  ['post', '/v1/policies/{policyId}/activate'],
+  ['post', '/v1/policies/{policyId}/disable'],
+  ['post', '/v1/authorization/evaluate'],
+];
 const TAG_OPERATIONS = [
   ['post', '/v1/tag-definitions'],
   ['get', '/v1/tag-definitions'],
@@ -167,9 +176,10 @@ for (const path of Object.keys(published.doc.paths ?? {}).sort()) {
 const expectedNew = TAG_OPERATIONS.map(([method, path]) => `${method} ${path}`).sort();
 const expectedSlice3 = SLICE3_OPERATIONS.map(([method, path]) => `${method} ${path}`).sort();
 const expectedSlice4 = [...expectedSlice3, ...MCP_OPERATIONS.map(([method, path]) => `${method} ${path}`)].sort();
+const expectedSlice5 = [...expectedSlice4, ...POLICY_OPERATIONS.map(([method, path]) => `${method} ${path}`)].sort();
 const parentNewSorted = [...parentNew].sort();
-if (!same(parentNewSorted, expectedSlice4)) {
-  breaking.push(`parent new operations are not exactly the slice 3 and MCP routes: ${parentNew.join(', ')}`);
+if (!same(parentNewSorted, expectedSlice5)) {
+  breaking.push(`parent new operations are not exactly the slice 3, MCP, and policy routes: ${parentNew.join(', ')}`);
 }
 const slice3Present = [];
 for (const [method, path] of SLICE3_OPERATIONS) {

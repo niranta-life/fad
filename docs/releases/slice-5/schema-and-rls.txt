@@ -1,0 +1,21 @@
+# schema and RLS observed on fad via postgres superuser
+fad_policies owner=postgres rls=true force=true
+fad_policy_decisions owner=postgres rls=true force=true
+fad_policy_revisions owner=postgres rls=true force=true
+grant fad_app fad_policies INSERT
+grant fad_app fad_policies SELECT
+grant fad_app fad_policies UPDATE
+grant fad_app fad_policy_decisions INSERT
+grant fad_app fad_policy_decisions SELECT
+grant fad_app fad_policy_revisions INSERT
+grant fad_app fad_policy_revisions SELECT
+role fad_app bypass=false super=false login=true
+role fad_bootstrap bypass=true super=false login=false
+role fad_migrator bypass=false super=false login=false
+policy fad_policy_decisions fad_policy_decision_tenant
+policy fad_policy_revisions fad_policy_rev_tenant
+checksum 20261021_005_policy_evaluation ad2885a9e1f7b77c679383f8f4cca1294da4b2076ffba0aee8c97cef4a49f120
+policy fad_policies fad_policy_tenant
+policy fad_policy_decisions fad_policy_decision_tenant
+policy fad_policy_revisions fad_policy_rev_tenant
+file_sha256 ad2885a9e1f7b77c679383f8f4cca1294da4b2076ffba0aee8c97cef4a49f120

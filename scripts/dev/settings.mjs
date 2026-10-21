@@ -9,6 +9,7 @@ const ORDER = [
   'FAD_TAGS_ENABLED',
   'FAD_SLICE3_ENABLED',
   'FAD_MCP_ENABLED',
+  'FAD_POLICIES_ENABLED',
   'FAD_MCP_AUTH_ISSUERS',
   'FAD_MCP_RESOURCE_URI',
   'FAD_MCP_EXPECTED_AUDIENCE',
@@ -24,6 +25,7 @@ const NAMES = {
   tags: 'FAD_TAGS_ENABLED',
   slice3: 'FAD_SLICE3_ENABLED',
   mcp: 'FAD_MCP_ENABLED',
+  policies: 'FAD_POLICIES_ENABLED',
   'mcp-issuer': 'FAD_MCP_AUTH_ISSUERS',
   'mcp-resource': 'FAD_MCP_RESOURCE_URI',
   'mcp-audience': 'FAD_MCP_EXPECTED_AUDIENCE',
@@ -39,6 +41,7 @@ const LABELS = {
   FAD_TAGS_ENABLED: 'Tags',
   FAD_SLICE3_ENABLED: 'Slice 3',
   FAD_MCP_ENABLED: 'MCP',
+  FAD_POLICIES_ENABLED: 'Policies',
   FAD_MCP_AUTH_ISSUERS: 'MCP issuer',
   FAD_MCP_RESOURCE_URI: 'MCP resource',
   FAD_MCP_EXPECTED_AUDIENCE: 'MCP audience',
@@ -51,7 +54,7 @@ const SECRET_KEYS = new Set([
   'FAD_API_KEY_PEPPER_V1',
 ]);
 
-const SWITCH_KEYS = new Set(['FAD_TAGS_ENABLED', 'FAD_SLICE3_ENABLED', 'FAD_MCP_ENABLED']);
+const SWITCH_KEYS = new Set(['FAD_TAGS_ENABLED', 'FAD_SLICE3_ENABLED', 'FAD_MCP_ENABLED', 'FAD_POLICIES_ENABLED']);
 
 export function parseEnv(text) {
   const map = new Map();
@@ -219,7 +222,7 @@ export function applyChange(original, name, rawValue, assertPepper) {
   else if (key === 'FAD_API_KEY_PEPPER_V1') next.set(key, checkPepper(rawValue, assertPepper));
   else if (key === 'FAD_PUBLISH_PORT') next.set(key, asPort(rawValue));
   else if (key === 'FAD_PUBLISH_ADDRESS') next.set(key, asLoopback(rawValue));
-  else if (key === 'FAD_TAGS_ENABLED' || key === 'FAD_SLICE3_ENABLED' || key === 'FAD_MCP_ENABLED') {
+  else if (key === 'FAD_TAGS_ENABLED' || key === 'FAD_SLICE3_ENABLED' || key === 'FAD_MCP_ENABLED' || key === 'FAD_POLICIES_ENABLED') {
     const stored = asSwitch(rawValue);
     next.set(key, stored);
   } else if (key === 'FAD_MCP_AUTH_ISSUERS') {

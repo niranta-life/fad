@@ -1,0 +1,24 @@
+{
+  "listed": [
+    "fad_list_agents",
+    "fad_get_agent",
+    "fad_register_agent",
+    "fad_update_agent",
+    "fad_suspend_agent",
+    "fad_activate_agent",
+    "fad_search_agents_by_tags",
+    "fad_list_policies",
+    "fad_get_policy",
+    "fad_create_policy",
+    "fad_update_draft_policy",
+    "fad_activate_policy",
+    "fad_disable_policy",
+    "fad_evaluate_access"
+  ],
+  "mcpId": "ae2888f2-4f7e-4caf-a8a3-3cd0f1b65d63",
+  "missingMatch": "FadMcpProtocolError",
+  "foreign": "NOT_FOUND",
+  "badAudience": "UnauthorizedError",
+  "ceilingWrite": "FadMcpProtocolError",
+  "enforcement": "not_enforced"
+}
