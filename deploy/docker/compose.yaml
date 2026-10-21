@@ -57,9 +57,13 @@ services:
       FAD_RATE_LIMIT_BACKEND: postgres
       FAD_RATE_LIMIT_MAX: "60"
       FAD_RATE_LIMIT_WINDOW_SECONDS: "60"
-      FAD_TAGS_ENABLED: "false"
-      FAD_SLICE3_ENABLED: "false"
-      FAD_MCP_ENABLED: "false"
+      FAD_TAGS_ENABLED: "${FAD_TAGS_ENABLED:-false}"
+      FAD_SLICE3_ENABLED: "${FAD_SLICE3_ENABLED:-false}"
+      FAD_MCP_ENABLED: "${FAD_MCP_ENABLED:-false}"
+      FAD_MCP_RESOURCE_URI: "${FAD_MCP_RESOURCE_URI:-}"
+      FAD_MCP_EXPECTED_AUDIENCE: "${FAD_MCP_EXPECTED_AUDIENCE:-}"
+      FAD_MCP_AUTH_ISSUERS: "${FAD_MCP_AUTH_ISSUERS:-}"
+      FAD_HTTP_ALLOWED_HOSTS: "${FAD_HTTP_ALLOWED_HOSTS:-}"
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -13,6 +13,9 @@
     "generate": "npm run generate -w @fad/contract",
     "build": "npm run build -w @fad/auth-core && npm run build -w @fad/contract && npm run build -w @fad/db && npm run build -w @fad/sdk && npm run build -w @fad/mcp-client && npm run build -w @fad/migrator && npm run build -w @fad/admin && npm run build -w @fad/api",
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "dev:setup": "node scripts/dev-setup.mjs",
+    "dev:config": "node scripts/dev-config.mjs",
+    "dev:server": "node scripts/dev-server.mjs",
     "fad-admin": "node apps/admin/dist/main.js",
     "fad-migrate": "node apps/migrator/dist/main.js"
   },

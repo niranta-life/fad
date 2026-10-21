@@ -2,16 +2,11 @@
 
 The Federated Agent Directory (FAD) is the control service for the agents in an organization. An administrator runs the service. A developer calls it from an agent with the TypeScript client `@fad/sdk`.
 
-The service does four things:
+The directory binds every API key to one organization, registers that organization's agents, and keeps a directory status for each agent: `active`, `suspended`, or `retired`. It also records capability versions, HTTPS endpoints, and bindings, and it lists active agents that declare a capability.
 
-- It binds every API key to one organization.
-- It registers that organization's agents.
-- It keeps a directory status for each agent: `active`, `suspended`, or `retired`.
-- It records capability versions, HTTPS endpoints, and bindings, and it lists active agents that declare a capability.
+Each agent has a stable id, a global URN of the form `urn:fad:agent:<organization-uuid>:<agent-uuid>`, and a revision. A real change writes an audit row, and one organization cannot read or change another organization's agents. The directory stores the record. The agent process does the work, and another system decides whether to call the agent.
 
-Each agent receives a stable id, a global URN of the form `urn:fad:agent:<organization-uuid>:<agent-uuid>`, and a revision. A real change writes an audit row. One organization cannot read or change another organization's agents. The directory records the agent. The agent process does its own work. A status of `active` is a directory fact, and another system still decides whether to call the agent. A discovery match is the same kind of record: the organization declared a capability and an HTTPS endpoint. Another system still checks that the endpoint answers and still decides whether the caller may invoke the agent.
-
-The repository contains a Node.js HTTP API, a PostgreSQL 16 database, the offline program `fad-admin`, the client `@fad/sdk` 0.4.0, the optional client `@fad/mcp-client` 0.1.0, and a container image with a local Docker Compose stack. The HTTP contract is `contracts/openapi.yaml`. The contract version is 1.4.0. The API version in every success and error body is `v1`.
+The repository contains a Node.js HTTP API, a PostgreSQL 16 database, the offline program `fad-admin`, the client `@fad/sdk` 0.4.0, the optional client `@fad/mcp-client` 0.1.0, and a container image with a local Docker Compose stack. The HTTP contract is `contracts/openapi.yaml`, contract version 1.4.0. Every success and error body uses API version `v1`.
 
 - [Server](#server) is for the administrator who runs the service and issues keys.
 - [Client](#client) is the call reference, with examples.
@@ -21,34 +16,93 @@ The repository contains a Node.js HTTP API, a PostgreSQL 16 database, the offlin
 
 You run four parts: PostgreSQL 16, a migration job, the API, and `fad-admin`. The API serves HTTP. `fad-admin` talks to PostgreSQL and is the only way to create an organization, a service principal, or an API key. Callers never send those commands to the API.
 
-You need Node.js 22 or later on a workstation that builds or runs `fad-admin`. The container image uses Node.js 24. You need Docker when you use the Compose stack.
+You need Node.js 22 or later on a workstation that builds or runs `fad-admin`. The container image uses Node.js 24. Use Docker when you start the Compose stack yourself. The development commands below also need [Colima](https://github.com/abiosoft/colima).
 
 ### Start the local stack
 
-Copy `.env.example` to a file you do not commit. Set `FAD_DEV_POSTGRES_PASSWORD`, `FAD_APP_DB_PASSWORD`, and `FAD_API_KEY_PEPPER_V1`. The pepper is a random secret of at least 32 bytes and at least 8 distinct byte values. The API rejects a short pepper, a low-diversity pepper, and a well-known placeholder. Every API replica and `fad-admin` use this same pepper. The database stores an HMAC-SHA256 verifier for each key. It does not store the key secret.
+The local stack needs two database passwords and an API pepper. The API accepts a pepper only when it is at least 32 bytes, contains at least 8 different byte values, and is not a well-known placeholder such as `password` or `changeme`. Every API replica and `fad-admin` use this same pepper. The database stores an HMAC-SHA256 verifier for each key and does not store the key secret.
+
+On a development computer with Colima, use the [development commands](#development-commands). They write the uncommitted file `.env.development`, check the machine, and start the stack. To start the stack without those commands, follow [Start with Compose](#start-with-compose) and copy `.env.example` to a file you do not commit.
+
+#### Development commands
+
+These three commands are for development only. They stop immediately when `NODE_ENV` is anything other than empty or `development`, and they use the running Colima Docker engine. If Colima is not running, or Docker is pointed at a different engine, they stop before they create or change a container.
 
 From the repository root:
+
+```sh
+npm run dev:setup
+npm run dev:config -- set postgres-password "a long password"
+npm run dev:config -- set app-password "another long password"
+npm run dev:config -- set pepper "a long random pepper"
+npm run dev:config -- set port 8080
+npm run dev:config -- review
+npm run dev:server -- start
+npm run dev:server -- status
+```
+
+The same programs are `node scripts/dev-setup.mjs`, `node scripts/dev-config.mjs`, and `node scripts/dev-server.mjs`.
+
+`dev:setup` checks that Colima is running, that Docker is that Colima engine, that Node.js is 22 or later, and that the installed packages match the lockfile. When packages are missing, it installs them from the lockfile. It does not install Colima, Docker, or Node.js, and it does not restart Colima when the checks already pass.
+
+`dev:config` creates and updates `.env.development` in the repository root. Git ignores that file, and the command saves it so that only your user can read it. `review` shows which settings are set and which are missing, and it prints `set` or `missing` for the passwords and the pepper instead of the values. `set` changes one setting. If the value is refused, the previous file stays unchanged.
+
+| Setting | What to enter |
+| --- | --- |
+| `postgres-password` | Password for the local PostgreSQL superuser. It cannot be blank. |
+| `app-password` | Password for the `fad_app` login. It cannot be blank. |
+| `pepper` | The API pepper described above. |
+| `port` | A whole number from 1 to 65535. The API is published on `127.0.0.1` and this port. |
+| `publish-address` | `127.0.0.1`, `localhost`, or `::1`. Any other address is refused. The Compose port stays on `127.0.0.1`. |
+| `tags`, `slice3`, `mcp` | `on` or `off`. The default is off. |
+| `mcp-issuer` | One or more `https` issuer addresses, separated by commas, with no user, password, query, fragment, or path. |
+| `mcp-resource` | The MCP resource address. `http` is accepted only for `127.0.0.1`, `localhost`, or `::1`. |
+| `mcp-audience` | The same address as `mcp-resource`. |
+| `allowed-hosts` | The host names the API accepts when MCP is on. |
+
+Turn `mcp` on only after the issuer, resource, audience, and allowed host are set, and only when the audience is the same address as the resource. While MCP is off, you can change the resource and the audience one at a time. While MCP is on, turn it off before you change either address, set both addresses, and then turn MCP on again.
+
+```sh
+npm run dev:config -- set mcp-issuer https://issuer.example
+npm run dev:config -- set mcp-resource http://127.0.0.1:8080/mcp
+npm run dev:config -- set mcp-audience http://127.0.0.1:8080/mcp
+npm run dev:config -- set allowed-hosts 127.0.0.1:8080
+npm run dev:config -- set mcp on
+```
+
+`dev:server` accepts `start`, `stop`, `restart`, and `status`. `start` builds the image when necessary and waits until the server is ready. The first start can take a few minutes, and a second start does not add a second copy. `stop` and `restart` keep the local database. `status` reports that the server is up, down, or not ready yet. None of these commands print a password, the pepper, or a database URL.
+
+```sh
+npm run dev:server -- restart
+npm run dev:server -- stop
+```
+
+After a successful start, `status` and the ready check below both agree that the server is up.
+
+#### Start with Compose
+
+From the repository root, with your own env file:
 
 ```sh
 docker compose --env-file /path/to/dev.env -f deploy/docker/compose.yaml up --build
 ```
 
-Compose starts PostgreSQL 16, runs the migration job once, and then starts the API. The API listens on `127.0.0.1` port `8080`. The API process does not change the schema. PostgreSQL is on the Compose network and is not published to the host.
+Compose starts PostgreSQL 16, runs the migration job once, and then starts the API. The API listens on `127.0.0.1` port `8080` unless `FAD_PUBLISH_PORT` says otherwise. The API process does not change the schema. PostgreSQL stays on the Compose network and is not published to the host.
 
-Confirm the process and the schema:
+#### Confirm the API
 
 ```sh
 curl -fsS http://127.0.0.1:8080/health/live
 curl -fsS http://127.0.0.1:8080/health/ready
 ```
 
-`/health/live` returns `{"status":"ok"}` when the process is up. `/health/ready` returns `{"status":"ready"}` when the database is reachable and the applied migrations match the files in the image. A database outage or a migration mismatch returns `{"status":"not_ready"}` with status 503.
+`/health/live` returns `{"status":"ok"}` when the process is up. `/health/ready` returns `{"status":"ready"}` when the database is reachable and the applied migrations match the files in the image. A database outage or a migration mismatch returns `{"status":"not_ready"}` with status 503. Use the port you set if it is not 8080.
 
 ### Issue an organization and keys
 
-Run `fad-admin` on a trusted computer. Set `FAD_BOOTSTRAP_DATABASE_URL` to a login that can `SET ROLE fad_bootstrap`. Set `FAD_API_KEY_PEPPER_V1` to the pepper the API uses. The runtime login `fad_app` cannot issue keys. In production, grant `fad_bootstrap` to the operator login and keep that grant off `fad_app`.
+Run `fad-admin` on a trusted computer. Set `FAD_BOOTSTRAP_DATABASE_URL` to a login that can `SET ROLE fad_bootstrap`, and set `FAD_API_KEY_PEPPER_V1` to the pepper the API uses. The runtime login `fad_app` cannot issue keys. In production, grant `fad_bootstrap` to the operator login and keep that grant off `fad_app`.
 
-On the local stack, load the env file and point the bootstrap URL at the Compose network. The local superuser can assume `fad_bootstrap` after the migration job has finished:
+On the local stack, load the env file and point the bootstrap URL at the Compose network. After the migration job has finished, the local superuser can assume `fad_bootstrap`:
 
 ```sh
 set -a
@@ -61,6 +115,8 @@ docker compose --env-file /path/to/dev.env -f deploy/docker/compose.yaml run --r
   api \
   node apps/admin/dist/main.js organization create --name "Organization A"
 ```
+
+If you used the development commands, `/path/to/dev.env` is `.env.development` in the repository root.
 
 On a workstation that can already reach PostgreSQL, build first and use the npm script:
 
@@ -81,7 +137,7 @@ npm run fad-admin -- principal create \
   --name "Accounts Payable"
 ```
 
-`credential issue` prints the API key in the field `api_key` and writes a one-line warning to stderr. The key looks like `fad_live.<kid>.<secret>`. Store it in the secret store immediately. The program shows that secret once. `credential list` prints the key id, principal, scopes, and status. It prints neither the secret nor the verifier.
+`credential issue` prints the API key in the field `api_key` and writes a one-line warning to stderr. The key looks like `fad_live.<kid>.<secret>`. Store it in the secret store immediately, because the program shows that secret once. `credential list` prints the key id, principal, scopes, and status, and it prints neither the secret nor the verifier.
 
 Issue a separate key for each program. Repeat `--scopes` or pass a comma-separated list. A scope must be one of the names below. A wildcard is rejected.
 
@@ -92,7 +148,7 @@ npm run fad-admin -- credential issue \
   --scopes organizations:read,agents:write
 ```
 
-Optional `--expires-at` takes a future timestamp. A missing expiry leaves the key active until you revoke it.
+Optional `--expires-at` takes a future timestamp. If you omit it, the key stays active until you revoke it.
 
 | Scope | Give it to | What the holder can do |
 | --- | --- | --- |
@@ -110,7 +166,7 @@ Optional `--expires-at` takes a future timestamp. A missing expiry leaves the ke
 | `endpoints:read` | A program that reads endpoint metadata or discovers agents | Read declared endpoints |
 | `endpoints:write` | The deploy job that declares where an agent is reached | Create, update, disable, or remove an endpoint declaration |
 
-A key that already exists does not gain a scope added later. Issue a new key when a program needs one of these names. A registrar key needs `organizations:read` and `agents:write`. A running agent that loads its record and lists peers needs `agents:read`. Keep `agents:lifecycle` on the operator tool. Suspending, activating, and retiring are administrator actions. A program that publishes a capability or binds one needs `capabilities:write`. A program that declares an endpoint needs `endpoints:write`. A program that discovers agents needs `agents:read`, `capabilities:read`, and `endpoints:read`.
+A key that already exists does not gain a scope you add to the product later. Issue a new key when a program needs another name from this table. A registrar key needs `organizations:read` and `agents:write`. A running agent that loads its record and lists peers needs `agents:read`. Keep `agents:lifecycle` on the operator tool, because suspending, activating, and retiring are administrator actions. Publishing or binding a capability needs `capabilities:write`, declaring an endpoint needs `endpoints:write`, and discovering agents needs `agents:read`, `capabilities:read`, and `endpoints:read`.
 
 Confirm a new key from the workstation:
 
@@ -119,11 +175,11 @@ curl -fsS http://127.0.0.1:8080/v1/organizations/current \
   -H "X-FAD-API-Key: $FAD_API_KEY"
 ```
 
-A success body has `data` and `meta`. `data.id` is the organization of the key. An error body has `error` and `meta`. A missing, unknown, expired, or revoked key returns status 401, as does a key whose principal or organization is inactive. A valid key without the required scope returns status 403. A database outage on an authenticated route returns status 503. Send the key only in `X-FAD-API-Key`. The header `X-Organization-Id` has no effect. A query parameter that names an organization returns status 400. The key selects the organization.
+A success body has `data` and `meta`, and `data.id` is the organization of the key. An error body has `error` and `meta`. A missing, unknown, expired, or revoked key returns status 401, as does a key whose principal or organization is inactive. A valid key without the required scope returns status 403. A database outage on an authenticated route returns status 503. Send the key only in `X-FAD-API-Key`. The header `X-Organization-Id` has no effect, and a query parameter that names an organization returns status 400. The key selects the organization.
 
 ### Operate the directory
 
-To register an agent yourself with curl, send `agents:write`, a JSON body, and an `Idempotency-Key` of 8 to 128 characters from `A-Z`, `a-z`, `0-9`, and `.`, `_`, `:`, `-`. The server chooses the agent id, the URN, the initial status `active`, and revision 1. The response carries `ETag` and `Location`. The same key and the same body, from the same principal, replay the original result for 24 hours. After that record expires, the same key is a new request.
+To register an agent with curl, send `agents:write`, a JSON body, and an `Idempotency-Key` of 8 to 128 characters from `A-Z`, `a-z`, `0-9`, and `.`, `_`, `:`, `-`. The server chooses the agent id, the URN, the initial status `active`, and revision 1. The response carries `ETag` and `Location`. The same key and the same body, from the same principal, replay the original result for 24 hours. After that record expires, the same key is a new request.
 
 ```sh
 curl -fsS -D - http://127.0.0.1:8080/v1/agents \
@@ -135,37 +191,39 @@ curl -fsS -D - http://127.0.0.1:8080/v1/agents \
 
 A name is 1 to 160 Unicode code points after trim. A description is optional and at most 2000 code points. The owner must be a service principal in the same organization.
 
-Later edits and status changes require `If-Match` with the current strong ETag, for example `"agent-v1"`, including the quotes. Read `GET /v1/agents/<agent-id>` first. `PATCH /v1/agents/<agent-id>` changes name, description, or owner and requires `agents:write`. Send `description: null` to clear the description. Status changes use `POST /v1/agents/<agent-id>/suspend`, `/activate`, or `/retire`, require `agents:lifecycle`, and take `{"reason":"..."}`. The reason is 1 to 500 code points and is stored in lifecycle history. A retired agent stays readable. It cannot be edited or activated. A repeated suspend, activate, or retire of an agent already in that status leaves the revision unchanged. A missing agent and an agent in another organization both return status 404.
+Later edits and status changes require `If-Match` with the current strong ETag, for example `"agent-v1"`, including the quotes. Read `GET /v1/agents/<agent-id>` first. `PATCH /v1/agents/<agent-id>` changes the name, description, or owner and requires `agents:write`. Send `description: null` to clear the description. Status changes use `POST /v1/agents/<agent-id>/suspend`, `/activate`, or `/retire`, require `agents:lifecycle`, and take `{"reason":"..."}`. The reason is 1 to 500 code points and is stored in the lifecycle history. A retired agent stays readable, but it cannot be edited or activated. Repeating suspend, activate, or retire when the agent is already in that status leaves the revision unchanged. A missing agent and an agent in another organization both return status 404.
 
-List with `GET /v1/agents`. Optional query fields are `status` (`active`, `suspended`, or `retired`), `limit` (default 25, maximum 100), and `cursor`. Any other query parameter returns status 400. Pages are ordered by `created_at` descending, then id descending. `meta.next_cursor` is null on the last page.
+List with `GET /v1/agents`. The optional query fields are `status` (`active`, `suspended`, or `retired`), `limit` (default 25, maximum 100), and `cursor`. Any other query parameter returns status 400. Pages are ordered by `created_at` descending, then id descending. `meta.next_cursor` is null on the last page.
 
 The default limit is 60 authenticated requests per key per 60 seconds. A limited call returns status 429 and `Retry-After`. Change the ceiling with `FAD_RATE_LIMIT_MAX` and `FAD_RATE_LIMIT_WINDOW_SECONDS`. `FAD_RATE_LIMIT_BACKEND` stays `postgres`.
 
+Tags, Slice 3, and MCP stay off until the matching value is the exact string `true`. The configuration command writes that string when you set `tags`, `slice3`, or `mcp` to `on`. Run the migration job before you enable a flag. To roll back, set the flag to `false`, or deploy the previous API image, and leave the new tables in place.
+
 ### Typed tags
 
-An administrator creates a typed tag definition. A service assigns that tag to an existing agent and searches agents by the tag value. A security administrator creates a governed tag. A service without `tags:governance` cannot change it. A service without `tags:restricted:read` cannot see it.
+An administrator creates a typed tag definition. A service assigns that tag to an existing agent and searches agents by the tag value. A security administrator creates a governed tag, which a service without `tags:governance` cannot change. A service without `tags:restricted:read` cannot see a restricted tag.
 
-Set `FAD_TAGS_ENABLED` to `true` to serve the tag routes. The default is off. The tag routes then answer 404. The agent routes stay the same. The agent record does not gain tag fields. A tag has its own ETag, `tag-vN`.
+While `FAD_TAGS_ENABLED` is not `true`, tag routes answer 404. Agent routes stay the same, and the agent record does not gain tag fields. A tag has its own ETag, `tag-vN`.
 
-Creating a definition requires `tags:define`. A governed or restricted definition also requires `tags:governance`. Assigning or removing a tag requires `tags:write`, and a governed tag also requires `tags:governance`. Reading tags requires `tags:read` together with `agents:read` for tags on an agent. Search with tag predicates requires `agents:read` and `tags:read`. A restricted predicate also requires `tags:restricted:read`. The reserved namespaces `security`, `compliance`, and `system` are governed and restricted.
-
-Run the migration job before you enable the flag. To roll back, set the flag to `false` and deploy the previous API image. Do not drop the tag tables.
+Creating a definition requires `tags:define`. A governed or restricted definition also requires `tags:governance`. Assigning or removing a tag requires `tags:write`, and a governed tag also requires `tags:governance`. Reading tags requires `tags:read` together with `agents:read` when the tags are on an agent. Search with tag predicates requires `agents:read` and `tags:read`, and a restricted predicate also requires `tags:restricted:read`. The reserved namespaces `security`, `compliance`, and `system` are governed and restricted.
 
 ### Capabilities and local discovery
 
-Set `FAD_SLICE3_ENABLED` to the exact string `true` to serve capability, endpoint, binding, and discovery routes. Any other value leaves those routes off. They then answer 404. Agent and tag routes stay the same. An endpoint or binding change does not change the agent ETag or a tag ETag. Run the migration job before you enable the flag. To roll back, set the flag to `false` or deploy the previous API image. Do not drop the new tables.
+While `FAD_SLICE3_ENABLED` is not `true`, the capability, endpoint, binding, and discovery routes answer 404. Agent and tag routes stay the same. An endpoint or binding change does not change the agent ETag or a tag ETag.
 
 `POST /v1/capabilities` publishes one immutable version. Send `capabilities:write`, an idempotency key, a capability id, a semantic version, a display name, and bounded JSON Schema Draft 2020-12 input and output schemas. The server stores a canonical contract digest and `verification` `self_declared`. The same key and the same body replay the original 201. A new key for a version that already exists returns 409. A published version stays as published.
 
-`PUT /v1/agents/<agent-id>/endpoints/<key>` declares where that agent is reached. Send `endpoints:write`. The URL is `https`, with a hostname, and with no username, password, query, fragment, or IP address. Put no credential in the URL or in any other field. The protocol is `a2a`, `mcp`, or `http_json`. The auth scheme is a label: `oauth2`, `mtls`, `api_key`, or `none`. The service stores that label and does not resolve or call the URL. Create with `If-None-Match: *`. The first ETag is `"endpoint-v1"`. A later change sends `If-Match` with the current strong ETag. A missing precondition returns 428. A stale ETag returns 412. An agent has at most 8 live endpoints. Deleting an endpoint that still has a live binding returns 409. Remove the binding first. A later create continues the revision, so the old ETag stays stale. Read an endpoint with `agents:read` and `endpoints:read`.
+`PUT /v1/agents/<agent-id>/endpoints/<key>` declares where that agent is reached. Send `endpoints:write`. The URL is `https`, with a hostname, and with no username, password, query, fragment, or IP address. Put no credential in the URL or in any other field. The protocol is `a2a`, `mcp`, or `http_json`. The auth scheme is a label: `oauth2`, `mtls`, `api_key`, or `none`. The service stores that label and does not resolve or call the URL. Create with `If-None-Match: *`. The first ETag is `"endpoint-v1"`. A later change sends `If-Match` with the current strong ETag. A missing precondition returns 428, and a stale ETag returns 412. An agent has at most 8 live endpoints. Deleting an endpoint that still has a live binding returns 409, so remove the binding first. A later create continues the revision, and the old ETag stays stale. Read an endpoint with `agents:read` and `endpoints:read`.
 
 `PUT /v1/agents/<agent-id>/capabilities/<capability-id>` binds one published version to one endpoint on that same agent. Send `capabilities:write`. The body is `version` and `endpoint_key`. Create with `If-None-Match: *`. The first ETag is `"cap-binding-v1"`. An agent has at most 32 live bindings, and one live binding for each capability id. Read a binding with `agents:read` and `capabilities:read`. Remove an endpoint or a binding with `DELETE`, `If-Match`, and the current ETag.
 
-`POST /v1/discovery/agents` lists active agents in the caller's organization. The caller needs `agents:read`, `capabilities:read`, and `endpoints:read`. The body names an exact capability id, an optional exact version, up to eight tag predicates, and an optional protocol list. A tag predicate also requires `tags:read`. A restricted predicate requires `tags:restricted:read`. Without that scope, a restricted tag and a tag the organization has not defined both return 403, and the body does not include the tag value. Each match includes the agent, the binding, the endpoint, `verification` `self_declared`, `availability` `not_checked`, and `invocation_authorization` `not_evaluated`. A disabled endpoint, a suspended or retired agent, or a tombstoned binding is omitted. The client methods are `capabilities`, `endpoints`, `bindings`, and `discovery`. Older methods keep their arguments and results.
+`POST /v1/discovery/agents` lists active agents in the caller's organization. The caller needs `agents:read`, `capabilities:read`, and `endpoints:read`. The body names an exact capability id, an optional exact version, up to eight tag predicates, and an optional protocol list. A tag predicate also requires `tags:read`, and a restricted predicate requires `tags:restricted:read`. Without that scope, a restricted tag and a tag the organization has not defined both return 403, and the body does not include the tag value. Each match includes the agent, the binding, the endpoint, `verification` `self_declared`, `availability` `not_checked`, and `invocation_authorization` `not_evaluated`. A disabled endpoint, a suspended or retired agent, or a tombstoned binding is omitted. The client methods are `capabilities`, `endpoints`, `bindings`, and `discovery`. Older methods keep their arguments and results.
 
 ### MCP
 
-Set `FAD_MCP_ENABLED` to the exact string `true` to serve `POST /mcp`. Any other value leaves MCP off. `POST /mcp` then answers 404. `/v1` stays the same and still uses `X-FAD-API-Key`. MCP accepts only `Authorization: Bearer`. The operator sets `FAD_MCP_RESOURCE_URI`, `FAD_MCP_EXPECTED_AUDIENCE` to that same URI, `FAD_MCP_AUTH_ISSUERS`, and `FAD_HTTP_ALLOWED_HOSTS`. The service does not issue tokens. Bind a principal offline, then disable that binding to stop MCP access. The runtime database role cannot insert a binding. A disabled binding does not revoke the principal's API key.
+While `FAD_MCP_ENABLED` is not `true`, `POST /mcp` answers 404. `/v1` stays the same and still uses `X-FAD-API-Key`. MCP accepts only `Authorization: Bearer`.
+
+When you enable MCP, set `FAD_MCP_RESOURCE_URI`, set `FAD_MCP_EXPECTED_AUDIENCE` to that same URI, and set `FAD_MCP_AUTH_ISSUERS` and `FAD_HTTP_ALLOWED_HOSTS`. The development configuration command enforces the same rule. The service does not issue tokens. Bind a principal offline, then disable that binding to stop MCP access. The runtime database role cannot insert a binding, and a disabled binding does not revoke the principal's API key.
 
 ```sh
 npm run fad-admin -- mcp bind \
@@ -178,7 +236,7 @@ npm run fad-admin -- mcp bind \
 npm run fad-admin -- mcp disable --binding-id <binding-uuid>
 ```
 
-Run the migration job before you enable the flag. When the flag is on and the issuer settings are absent, the process stays up, `/health/live` stays ok, and `/health/ready` and `/mcp` answer 503. To roll back, set the flag to `false` or deploy the previous API image. Do not drop `mcp_principal_bindings`. The optional client is `@fad/mcp-client`. `@fad/sdk` keeps its arguments and results.
+If the flag is on and the issuer settings are absent or incomplete, the process stays up, `/health/live` stays ok, and `/health/ready` and `/mcp` answer 503. Do not drop `mcp_principal_bindings` when you roll back. The optional client is `@fad/mcp-client`. `@fad/sdk` keeps its arguments and results.
 
 ### Rotate a key and stop a caller
 
@@ -192,11 +250,11 @@ npm run fad-admin -- credential revoke \
   --reason rotation
 ```
 
-`organization suspend --organization-id <uuid> --reason <text>` stops every key in that organization. `principal disable --organization-id <uuid> --principal-id <uuid> --reason <text>` stops that principal's keys. Both require a reason of 1 to 160 characters. A lost key is revoked the same way. Replacing the pepper is a new pepper value plus newly issued keys. The API refuses to start when the pepper is missing or weak.
+`organization suspend --organization-id <uuid> --reason <text>` stops every key in that organization. `principal disable --organization-id <uuid> --principal-id <uuid> --reason <text>` stops that principal's keys. Both require a reason of 1 to 160 characters. Revoke a lost key the same way. Replacing the pepper means a new pepper value plus newly issued keys. The API refuses to start when the pepper is missing or weak.
 
 ### Run it in production
 
-Put a TLS-terminating proxy in front of the API. The API process does not terminate public TLS. Run at least two API replicas. Keep PostgreSQL unpublished. Apply roles and migrations with a privileged job, then start the API as `fad_app`.
+Put a TLS-terminating proxy in front of the API. The API process does not terminate public TLS. Run at least two API replicas, keep PostgreSQL unpublished, and apply roles and migrations with a privileged job before you start the API as `fad_app`. The development commands do not run in production.
 
 Production startup requires all of the following:
 
@@ -260,7 +318,7 @@ console.log(organization.data.id, organization.meta.request_id);
 
 ### Register an agent
 
-`agents.register` requires `agents:write`. `idempotencyKey` is required. Keep the body and the key stable for retries of that same registration. The directory retains the result for 24 hours. During that window, the same principal, key, and body return the original response, including the original revision. After the record expires, the same key is a new registration and creates another agent. Store `data.id` and call `agents.get` on later startups.
+`agents.register` requires `agents:write` and an `idempotencyKey`. Keep the body and the key stable when you retry that same registration. The directory retains the result for 24 hours. During that window, the same principal, key, and body return the original response, including the original revision. After the record expires, the same key is a new registration and creates another agent. Store `data.id` and call `agents.get` on later startups.
 
 ```ts
 const registered = await fad.agents.register(
@@ -278,7 +336,7 @@ console.log(registered.etag); // "agent-v1"
 console.log(registered.location); // /v1/agents/<id>
 ```
 
-`owner_principal_id` is the service principal the administrator created. The current-organization response does not include it. Configure it beside the API key.
+`owner_principal_id` is the service principal the administrator created. The current-organization response does not include it, so configure it beside the API key.
 
 ### Read and list agents
 
@@ -303,7 +361,7 @@ for await (const agent of fad.agents.iterate({ status: 'active' })) {
 
 ### Change an agent
 
-`agents.update` requires `agents:write`, an idempotency key, and `ifMatch` set to the ETag from `get` or from the previous write. Only fields you send are changed. `description: null` clears the description. A retired agent cannot be edited. A call that changes nothing keeps the current revision. Reuse the idempotency key only to retry that same body and the same ETag. A new edit uses a new key. The key and the ETag are both part of the stored request.
+`agents.update` requires `agents:write`, an idempotency key, and `ifMatch` set to the ETag from `get` or from the previous write. Only the fields you send are changed. `description: null` clears the description. A retired agent cannot be edited. A call that changes nothing keeps the current revision. Reuse the idempotency key only to retry that same body and the same ETag. A new edit uses a new key, because the key and the ETag are both part of the stored request.
 
 ```ts
 const updated = await fad.agents.update(
@@ -411,9 +469,9 @@ Ask the administrator for four values and put them in the secret store the agent
 - `FAD_ORGANIZATION_ID`, the organization id you expect that key to return.
 - `FAD_OWNER_PRINCIPAL_ID`, the service principal that owns the agent. You need this only in the process that registers.
 
-Choose the key for the job that process does. A deploy job that registers the agent holds `organizations:read` and `agents:write`. The running agent holds `agents:read` and loads its record, or lists peers, with that key. An operator tool holds `agents:lifecycle`. A job that publishes a capability or binds one holds `capabilities:write`. A job that declares an endpoint holds `endpoints:write`. A job that discovers agents holds `agents:read`, `capabilities:read`, and `endpoints:read`. When the agent process itself registers on startup, that process holds `agents:write`, and lifecycle stays on the operator tool. The agent never runs `fad-admin` and never opens PostgreSQL.
+Choose the key for the work that process does, using the scopes in the table above. A deploy job that registers the agent holds `organizations:read` and `agents:write`. The running agent holds `agents:read`. An operator tool holds `agents:lifecycle`. When the agent process itself registers on startup, that process holds `agents:write`, and lifecycle stays on the operator tool. The agent never runs `fad-admin` and never opens PostgreSQL.
 
-On startup, wait until the directory is ready, confirm the organization, register once, and then read the live record. Persist `data.id`. On the next start, skip registration and call `agents.get` with the saved id. Registration is safe to retry with the same body and the same idempotency key for 24 hours. It is not a permanent get-or-create. After the idempotency record expires, repeating it creates a second agent.
+On startup, wait until the directory is ready, confirm the organization, register once, and then read the live record. Persist `data.id`. On the next start, skip registration and call `agents.get` with the saved id. Registration is safe to retry with the same body and the same idempotency key for 24 hours. It is not a permanent get-or-create: after the idempotency record expires, repeating it creates a second agent.
 
 ```ts
 import { FadClient } from '@fad/sdk';
@@ -452,7 +510,7 @@ export async function joinDirectory(signal: AbortSignal): Promise<{ id: string; 
 }
 ```
 
-Save the returned `id` as `FAD_AGENT_ID` before the next start. Publish `globalId` where another system needs a stable name for this agent. Keep `etag` for the next update. When the agent's behavior changes, call `agents.update` with a new idempotency key and that ETag. Leave suspend, activate, and retire to the operator tool unless this process was issued `agents:lifecycle`.
+Save the returned `id` as `FAD_AGENT_ID` before the next start. Publish `globalId` where another system needs a stable name for this agent, and keep `etag` for the next update. When the agent's behavior changes, call `agents.update` with a new idempotency key and that ETag. Leave suspend, activate, and retire to the operator tool unless this process was issued `agents:lifecycle`.
 
 To see the other active agents in the same organization, walk the directory with the read key:
 
@@ -479,9 +537,8 @@ for (const match of matches.data) {
 }
 ```
 
-`availability` is `not_checked`. `invocation_authorization` is `not_evaluated`. The client does not open `match.endpoint.url`.
+`availability` is `not_checked` and `invocation_authorization` is `not_evaluated`. The client does not open `match.endpoint.url`.
 
 ## License
 
 This project uses the MIT license. Read the file `LICENSE`.
-
