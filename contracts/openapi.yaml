@@ -1,13 +1,15 @@
 openapi: 3.1.0
 info:
   title: Federated Agent Directory API
-  version: 1.1.0
+  version: 1.2.0
   description: |
     Normative public HTTP contract. Header authentication with X-FAD-API-Key
     is scoped to a single organization and principal. A supplied
     tenant/organization selector never changes the authenticated tenant.
     Health and the current organization are the Slice 0 operations. Agent
-    registration and lifecycle are additive Slice 1 operations.
+    registration and lifecycle are additive Slice 1 operations. Typed tags
+    and tag search are additive Slice 2 operations. A deployment serves the
+    tag routes only when typed tags are enabled.
 servers:
   - url: https://fad.example.internal
 security:
@@ -16,6 +18,7 @@ tags:
   - name: Health
   - name: Organizations
   - name: Agents
+  - name: Tags
 paths:
   /health/live:
     get:
@@ -324,6 +327,267 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
         '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/tag-definitions:
+    post:
+      tags: [Tags]
+      operationId: createTagDefinition
+      summary: Create an immutable typed tag definition
+      description: |
+        Requires tags:define. A governed or restricted definition also requires
+        tags:governance. Reserved namespaces security, compliance, and system
+        must be governed and restricted. The definition cannot be changed later.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TagDefinitionCreate' }
+      responses:
+        '201':
+          description: Definition created
+          headers:
+            Location: { $ref: '#/components/headers/TagDefinitionLocation' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TagDefinitionResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/TagConflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    get:
+      tags: [Tags]
+      operationId: listTagDefinitions
+      summary: List visible tag definitions
+      description: |
+        Requires tags:read. Restricted definitions are omitted unless the
+        caller also has tags:restricted:read. The page does not report a count
+        of omitted definitions.
+      parameters:
+        - $ref: '#/components/parameters/TagNamespaceFilter'
+        - $ref: '#/components/parameters/TagLimit'
+        - $ref: '#/components/parameters/TagCursor'
+      responses:
+        '200':
+          description: Visible definitions in namespace and key order
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TagDefinitionListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/tag-definitions/{namespace}/{key}:
+    parameters:
+      - $ref: '#/components/parameters/TagNamespace'
+      - $ref: '#/components/parameters/TagKey'
+    get:
+      tags: [Tags]
+      operationId: getTagDefinition
+      summary: Read one tag definition
+      description: |
+        Requires tags:read. A restricted definition without
+        tags:restricted:read is the same 404 as a missing definition.
+      responses:
+        '200':
+          description: Definition
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TagDefinitionResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/TagDefinitionNotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/agents/search:
+    post:
+      tags: [Tags]
+      operationId: searchAgentsByTag
+      summary: Search agents by exact typed tag equality
+      description: |
+        Read-only. Requires agents:read. Tag predicates also require tags:read.
+        A restricted predicate requires tags:restricted:read before any agent
+        query runs. Predicates use AND. At most 8 predicates. The agent
+        response shape is the Slice 1 list.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AgentTagSearch' }
+      responses:
+        '200':
+          description: Matching agents
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/agents/{agentId}/tags:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+    get:
+      tags: [Tags]
+      operationId: listAgentTags
+      summary: List visible active tag assignments
+      description: |
+        Requires agents:read and tags:read. Restricted assignments are omitted
+        unless the caller has tags:restricted:read. Tombstones are omitted.
+        An agent outside the caller organization is the same 404 as a missing agent.
+      responses:
+        '200':
+          description: Visible active assignments
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TagAssignmentListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/AgentNotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/agents/{agentId}/tags/{namespace}/{key}:
+    parameters:
+      - $ref: '#/components/parameters/AgentId'
+      - $ref: '#/components/parameters/TagNamespace'
+      - $ref: '#/components/parameters/TagKey'
+    get:
+      tags: [Tags]
+      operationId: getAgentTag
+      summary: Read one active tag assignment
+      description: |
+        Requires agents:read and tags:read. A restricted assignment without
+        tags:restricted:read is the same 404 as a missing assignment.
+        The ETag is tag-vN and does not change the agent ETag.
+      responses:
+        '200':
+          description: Active assignment
+          headers:
+            ETag: { $ref: '#/components/headers/TagETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TagAssignmentResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/TagAssignmentNotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    put:
+      tags: [Tags]
+      operationId: putAgentTag
+      summary: Assign or replace one tag value
+      description: |
+        Requires tags:write. A governed or restricted tag also requires
+        tags:governance. Send exactly one of If-None-Match * or a strong
+        If-Match tag-vN. Idempotency-Key is required. A governed change
+        requires reason. false and 0 are valid values. This does not change
+        the agent revision.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/TagIfMatch'
+        - $ref: '#/components/parameters/TagIfNoneMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TagAssignmentPut' }
+      responses:
+        '200':
+          description: Assignment updated or unchanged
+          headers:
+            ETag: { $ref: '#/components/headers/TagETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TagAssignmentResponse' }
+        '201':
+          description: Assignment created
+          headers:
+            ETag: { $ref: '#/components/headers/TagETag' }
+            Location: { $ref: '#/components/headers/TagAssignmentLocation' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TagAssignmentResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/TagAssignmentNotFound' }
+        '409': { $ref: '#/components/responses/TagConflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    delete:
+      tags: [Tags]
+      operationId: deleteAgentTag
+      summary: Tombstone one tag assignment
+      description: |
+        Requires tags:write and a strong If-Match. A governed tag also requires
+        tags:governance and X-Change-Reason. The row stays. The revision
+        increases. There is no response body.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/TagIfMatch'
+        - $ref: '#/components/parameters/ChangeReason'
+      responses:
+        '204':
+          description: Assignment tombstoned
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/TagAssignmentNotFound' }
+        '409': { $ref: '#/components/responses/TagConflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
 components:
   securitySchemes:
     FadApiKey:
@@ -350,6 +614,49 @@ components:
       required: true
       description: Exact strong ETag, for example "agent-v2". Wildcards and weak tags are rejected.
       schema: { type: string, pattern: '^"agent-v[1-9][0-9]*"$' }
+    TagNamespace:
+      name: namespace
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-z][a-z0-9_-]{0,39}$' }
+    TagKey:
+      name: key
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-z][a-z0-9_-]{0,39}$' }
+    TagNamespaceFilter:
+      name: namespace
+      in: query
+      required: false
+      schema: { type: string, pattern: '^[a-z][a-z0-9_-]{0,39}$' }
+    TagLimit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    TagCursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, minLength: 1, maxLength: 4096 }
+    TagIfMatch:
+      name: If-Match
+      in: header
+      required: false
+      description: Strong tag ETag such as "tag-v2". Weak tags, lists, and wildcards are rejected.
+      schema: { type: string, pattern: '^"tag-v[1-9][0-9]*"$' }
+    TagIfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      description: Exactly * when creating an assignment. Mutually exclusive with If-Match.
+      schema: { type: string, enum: ['*'] }
+    ChangeReason:
+      name: X-Change-Reason
+      in: header
+      required: false
+      description: Required when deleting a governed tag. 1–500 Unicode code points.
+      schema: { type: string, minLength: 1 }
   headers:
     RequestId:
       description: Unique server-generated request correlation UUID.
@@ -369,6 +676,15 @@ components:
     AgentLocation:
       description: Relative URI of the created agent.
       schema: { type: string, pattern: '^/v1/agents/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' }
+    TagETag:
+      description: Strong ETag for one tag assignment. It does not change the agent ETag.
+      schema: { type: string, pattern: '^"tag-v[1-9][0-9]*"$' }
+    TagDefinitionLocation:
+      description: Relative URI of the created tag definition.
+      schema: { type: string }
+    TagAssignmentLocation:
+      description: Relative URI of the created tag assignment.
+      schema: { type: string }
   schemas:
     Liveness:
       type: object
@@ -518,6 +834,138 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Agent' }
         meta: { $ref: '#/components/schemas/PageMeta' }
+    TagType:
+      type: string
+      enum: [string, integer, boolean, enum]
+    TagVisibility:
+      type: string
+      enum: [internal, restricted]
+    TagScalar:
+      description: |
+        String, integer, or boolean. The definition chooses the type.
+        String length is counted in Unicode code points, not UTF-16 units.
+      oneOf:
+        - type: string
+          minLength: 1
+        - type: integer
+          minimum: -1000000000
+          maximum: 1000000000
+        - type: boolean
+    TagDefinitionCreate:
+      type: object
+      additionalProperties: false
+      required: [namespace, key, value_type, governed, visibility]
+      properties:
+        namespace: { type: string, pattern: '^[a-z][a-z0-9_-]{0,39}$' }
+        key: { type: string, pattern: '^[a-z][a-z0-9_-]{0,39}$' }
+        value_type: { $ref: '#/components/schemas/TagType' }
+        enum_values:
+          type: array
+          uniqueItems: true
+          minItems: 2
+          maxItems: 32
+          items: { type: string, minLength: 1 }
+        governed: { type: boolean }
+        visibility: { $ref: '#/components/schemas/TagVisibility' }
+        description: { type: string }
+    TagDefinition:
+      type: object
+      additionalProperties: false
+      required: [organization_id, namespace, key, value_type, enum_values, governed, visibility, description, created_by, created_at]
+      properties:
+        organization_id: { type: string, format: uuid, readOnly: true }
+        namespace: { type: string, pattern: '^[a-z][a-z0-9_-]{0,39}$' }
+        key: { type: string, pattern: '^[a-z][a-z0-9_-]{0,39}$' }
+        value_type: { $ref: '#/components/schemas/TagType' }
+        enum_values:
+          type: [array, 'null']
+          items: { type: string }
+        governed: { type: boolean }
+        visibility: { $ref: '#/components/schemas/TagVisibility' }
+        description: { type: string }
+        created_by: { type: string, format: uuid, readOnly: true }
+        created_at: { type: string, format: date-time, readOnly: true }
+    TagAssignmentPut:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties:
+        value: { $ref: '#/components/schemas/TagScalar' }
+        reason:
+          type: string
+          minLength: 1
+          description: Required when the definition is governed. Counted in Unicode code points.
+    TagAssignment:
+      type: object
+      additionalProperties: false
+      required: [agent_id, namespace, key, value, revision, governed, visibility, created_by, updated_by, created_at, updated_at]
+      properties:
+        agent_id: { type: string, format: uuid, readOnly: true }
+        namespace: { type: string, readOnly: true }
+        key: { type: string, readOnly: true }
+        value: { $ref: '#/components/schemas/TagScalar' }
+        revision: { type: integer, format: int64, minimum: 1, readOnly: true }
+        governed: { type: boolean, readOnly: true }
+        visibility: { $ref: '#/components/schemas/TagVisibility' }
+        created_by: { type: string, format: uuid, readOnly: true }
+        updated_by: { type: string, format: uuid, readOnly: true }
+        created_at: { type: string, format: date-time, readOnly: true }
+        updated_at: { type: string, format: date-time, readOnly: true }
+    TagPredicate:
+      type: object
+      additionalProperties: false
+      required: [namespace, key, operator, value]
+      properties:
+        namespace: { type: string, pattern: '^[a-z][a-z0-9_-]{0,39}$' }
+        key: { type: string, pattern: '^[a-z][a-z0-9_-]{0,39}$' }
+        operator: { type: string, const: eq }
+        value: { $ref: '#/components/schemas/TagScalar' }
+    AgentTagSearch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        tags:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items: { $ref: '#/components/schemas/TagPredicate' }
+        status: { $ref: '#/components/schemas/AgentStatus' }
+        limit: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        cursor: { type: string, minLength: 1, maxLength: 4096 }
+    TagDefinitionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/TagDefinition' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    TagDefinitionListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/TagDefinition' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    TagAssignmentResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/TagAssignment' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    TagAssignmentListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          maxItems: 64
+          items: { $ref: '#/components/schemas/TagAssignment' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
   responses:
     HealthUnavailable:
       description: Process is not ready to serve traffic
@@ -690,4 +1138,37 @@ components:
           schema: { $ref: '#/components/schemas/ErrorResponse' }
           example:
             error: { code: UNSUPPORTED_MEDIA_TYPE, message: Content-Type must be application/json. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    TagDefinitionNotFound:
+      description: The tag definition is missing, or it is restricted and the caller cannot read it
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: TAG_DEFINITION_NOT_FOUND, message: Tag definition not found. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    TagAssignmentNotFound:
+      description: The assignment is missing, tombstoned, or hidden. A missing agent uses AGENT_NOT_FOUND.
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: TAG_ASSIGNMENT_NOT_FOUND, message: Tag assignment not found. }
+            meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    TagConflict:
+      description: The definition already exists, the idempotency key was reused, or the agent is retired
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          example:
+            error: { code: TAG_DEFINITION_EXISTS, message: The tag definition already exists. }
             meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }

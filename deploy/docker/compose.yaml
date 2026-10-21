@@ -57,6 +57,7 @@ services:
       FAD_RATE_LIMIT_BACKEND: postgres
       FAD_RATE_LIMIT_MAX: "60"
       FAD_RATE_LIMIT_WINDOW_SECONDS: "60"
+      FAD_TAGS_ENABLED: "false"
     depends_on:
       migrate:
         condition: service_completed_successfully

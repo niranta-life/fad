@@ -91,3 +91,85 @@ export interface AgentListResponse {
   meta: PageMeta;
 }
 
+export type TagType = "string" | "integer" | "boolean" | "enum";
+
+export type TagVisibility = "internal" | "restricted";
+
+export type TagScalar = unknown;
+
+export interface TagDefinitionCreate {
+  namespace: string;
+  key: string;
+  value_type: TagType;
+  enum_values?: string[];
+  governed: boolean;
+  visibility: TagVisibility;
+  description?: string;
+}
+
+export interface TagDefinition {
+  organization_id: string;
+  namespace: string;
+  key: string;
+  value_type: TagType;
+  enum_values: unknown | null;
+  governed: boolean;
+  visibility: TagVisibility;
+  description: string;
+  created_by: string;
+  created_at: string;
+}
+
+export interface TagAssignmentPut {
+  value: TagScalar;
+  reason?: string;
+}
+
+export interface TagAssignment {
+  agent_id: string;
+  namespace: string;
+  key: string;
+  value: TagScalar;
+  revision: number;
+  governed: boolean;
+  visibility: TagVisibility;
+  created_by: string;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TagPredicate {
+  namespace: string;
+  key: string;
+  operator: "eq";
+  value: TagScalar;
+}
+
+export interface AgentTagSearch {
+  tags?: TagPredicate[];
+  status?: AgentStatus;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface TagDefinitionResponse {
+  data: TagDefinition;
+  meta: ResponseMeta;
+}
+
+export interface TagDefinitionListResponse {
+  data: TagDefinition[];
+  meta: PageMeta;
+}
+
+export interface TagAssignmentResponse {
+  data: TagAssignment;
+  meta: ResponseMeta;
+}
+
+export interface TagAssignmentListResponse {
+  data: TagAssignment[];
+  meta: ResponseMeta;
+}
+

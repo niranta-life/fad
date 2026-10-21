@@ -1,0 +1,60 @@
+{
+  "ok": true,
+  "slice0_package_sha256": "bb5a6dc96ae93fb42ed6b69af1770cd435bba43809c8942b0702d9a748beb4cc",
+  "slice0_package_unchanged": true,
+  "published_sha256": "a270b34a5ae14e88f40f9aca90d08f20d055ee05b4186786669718049e429f03",
+  "parent_commit": "566bf826993bb7d783de6ea080bc0f4a9bc0d139",
+  "parent_preexisting_operations": [
+    "get /health/live",
+    "get /health/ready",
+    "get /v1/agents",
+    "post /v1/agents",
+    "get /v1/agents/{agentId}",
+    "patch /v1/agents/{agentId}",
+    "post /v1/agents/{agentId}/activate",
+    "post /v1/agents/{agentId}/retire",
+    "post /v1/agents/{agentId}/suspend",
+    "get /v1/organizations/current"
+  ],
+  "parent_preexisting_deep_equal": true,
+  "parent_new_operations": [
+    "delete /v1/agents/{agentId}/tags/{namespace}/{key}",
+    "get /v1/agents/{agentId}/tags",
+    "get /v1/agents/{agentId}/tags/{namespace}/{key}",
+    "get /v1/tag-definitions",
+    "get /v1/tag-definitions/{namespace}/{key}",
+    "post /v1/agents/search",
+    "post /v1/tag-definitions",
+    "put /v1/agents/{agentId}/tags/{namespace}/{key}"
+  ],
+  "parent_new_operations_are_only_tag_routes": true,
+  "document_changes": [
+    "info",
+    "tags"
+  ],
+  "preserved_operations": [
+    "get /health/live",
+    "get /health/ready",
+    "get /v1/organizations/current"
+  ],
+  "slice1_operations": [
+    "post /v1/agents",
+    "get /v1/agents",
+    "get /v1/agents/{agentId}",
+    "patch /v1/agents/{agentId}",
+    "post /v1/agents/{agentId}/suspend",
+    "post /v1/agents/{agentId}/activate",
+    "post /v1/agents/{agentId}/retire"
+  ],
+  "added_operations": [
+    "post /v1/tag-definitions",
+    "get /v1/tag-definitions",
+    "get /v1/tag-definitions/{namespace}/{key}",
+    "get /v1/agents/{agentId}/tags",
+    "get /v1/agents/{agentId}/tags/{namespace}/{key}",
+    "put /v1/agents/{agentId}/tags/{namespace}/{key}",
+    "delete /v1/agents/{agentId}/tags/{namespace}/{key}",
+    "post /v1/agents/search"
+  ],
+  "breaking": []
+}

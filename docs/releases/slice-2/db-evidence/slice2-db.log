@@ -1,0 +1,13 @@
+version=20261021_001_typed_tags
+checksum_rows=1
+checksum_len=64
+checksum_matches_file=true
+checksum=0d167c6c212b2487afa8c1ba6ad0b0a0cf873c1b2dc1297bd1f5c7b8d9d7d45c
+fad_app_bypassrls=false
+fad_app_super=false
+def_delete=false
+def_update=false
+hist_delete=false
+asg_delete=false
+rows_without_org_context=0
+insert_without_org_context=42501

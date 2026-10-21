@@ -1,0 +1,22 @@
+{
+  "status": 201,
+  "body": {
+    "data": {
+      "organization_id": "5789e974-561a-4ae8-8bd7-e7bd54417130",
+      "namespace": "department",
+      "key": "name",
+      "value_type": "string",
+      "enum_values": null,
+      "governed": false,
+      "visibility": "internal",
+      "description": "Department name",
+      "created_by": "000faf3d-ab15-43c6-bb4b-6b9d50a8c74b",
+      "created_at": "2026-10-21T05:07:07.638Z"
+    },
+    "meta": {
+      "request_id": "48f96fd1-ad61-44df-a75d-c10c1ee26401",
+      "api_version": "v1"
+    }
+  },
+  "location": "/v1/tag-definitions/department/name"
+}

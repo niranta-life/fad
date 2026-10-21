@@ -1,0 +1,14 @@
+Limit  (cost=17.74..17.74 rows=1 width=164)
+  CTE matched
+    ->  Index Only Scan using agent_tag_match_idx on agent_tag_assignments match_tag  (cost=0.28..8.30 rows=1 width=16)
+          Index Cond: ((organization_id = '5789e974-561a-4ae8-8bd7-e7bd54417130'::uuid) AND (namespace = 'department'::text) AND (tag_key = 'name'::text) AND (tag_value = '"finance"'::jsonb))
+  ->  Sort  (cost=9.44..9.44 rows=1 width=164)
+        Sort Key: agents.created_at DESC, agents.id DESC
+        ->  Nested Loop  (cost=4.21..9.43 rows=1 width=164)
+              Join Filter: (agents.id = matched.agent_id)
+              ->  CTE Scan on matched  (cost=0.00..0.02 rows=1 width=16)
+              ->  Bitmap Heap Scan on agents  (cost=4.21..9.33 rows=6 width=132)
+                    Recheck Cond: (organization_id = '5789e974-561a-4ae8-8bd7-e7bd54417130'::uuid)
+                    Filter: (status = 'active'::text)
+                    ->  Bitmap Index Scan on agents_owner_idx  (cost=0.00..4.20 rows=8 width=0)
+                          Index Cond: (organization_id = '5789e974-561a-4ae8-8bd7-e7bd54417130'::uuid)

@@ -79,6 +79,96 @@ export interface AgentListQuery {
   cursor?: string;
 }
 
+export type TagValue = string | number | boolean;
+export type TagType = 'string' | 'integer' | 'boolean' | 'enum';
+export type TagVisibility = 'internal' | 'restricted';
+
+export interface TagDefinitionCreate {
+  namespace: string;
+  key: string;
+  value_type: TagType;
+  enum_values?: string[];
+  governed: boolean;
+  visibility: TagVisibility;
+  description?: string;
+}
+
+export interface TagDefinition {
+  organization_id: string;
+  namespace: string;
+  key: string;
+  value_type: TagType;
+  enum_values: string[] | null;
+  governed: boolean;
+  visibility: TagVisibility;
+  description: string;
+  created_by: string;
+  created_at: string;
+}
+
+export interface TagDefinitionResult extends FadResponse<TagDefinition> {
+  location?: string;
+}
+
+export interface TagDefinitionListQuery {
+  namespace?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface TagDefinitionPage {
+  data: TagDefinition[];
+  meta: { request_id: string; api_version: 'v1'; limit: number; next_cursor: string | null };
+}
+
+export interface AgentTag {
+  agent_id: string;
+  namespace: string;
+  key: string;
+  value: TagValue;
+  revision: number;
+  governed: boolean;
+  visibility: TagVisibility;
+  created_by: string;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AgentTagResult extends FadResponse<AgentTag> {
+  etag: string;
+  location?: string;
+}
+
+export interface AgentTagPut {
+  value: TagValue;
+  reason?: string;
+}
+
+export interface TagPutOptions extends IdempotentOptions {
+  ifMatch?: string;
+  ifNoneMatch?: '*';
+}
+
+export interface TagDeleteOptions extends IdempotentOptions {
+  ifMatch: string;
+  reason?: string;
+}
+
+export interface SearchPredicate {
+  namespace: string;
+  key: string;
+  operator: 'eq';
+  value: TagValue;
+}
+
+export interface AgentSearchInput {
+  tags?: SearchPredicate[];
+  status?: AgentStatus;
+  limit?: number;
+  cursor?: string;
+}
+
 interface IdempotentOptions extends CallOptions {
   idempotencyKey: string;
 }
@@ -227,7 +317,7 @@ export class FadClient {
     }
     this.maxRetryAfterMs = options.maxRetryAfterMs ?? DEFAULT_RETRY_AFTER_CAP_MS;
     const suffix = options.userAgentSuffix ? ` ${options.userAgentSuffix}` : '';
-    this.userAgent = `@fad/sdk/0.2.0${suffix}`;
+    this.userAgent = `@fad/sdk/0.3.0${suffix}`;
     this.now = options.now ?? Date.now;
     this.random = options.random ?? Math.random;
     this.sleep = options.sleep ?? delay;
@@ -258,6 +348,29 @@ export class FadClient {
     retire: (agentId: string, body: LifecycleRequest, options: PreconditionOptions): Promise<AgentResult> =>
       this.agentWrite(`/v1/agents/${encodeURIComponent(agentId)}/retire`, 'POST', body, options, true),
     iterate: (query: AgentListQuery = {}, options?: CallOptions): AsyncGenerator<Agent> => this.iterateAgents(query, options),
+    search: (body: AgentSearchInput, options?: CallOptions): Promise<AgentPage> => this.agentSearch(body, options),
+    iterateSearch: (body: AgentSearchInput, options?: CallOptions): AsyncGenerator<Agent> => this.iterateSearch(body, options),
+  };
+
+  readonly tagDefinitions = {
+    create: (body: TagDefinitionCreate, options: IdempotentOptions): Promise<TagDefinitionResult> =>
+      this.definitionCreate(body, options),
+    get: (namespace: string, key: string, options?: CallOptions): Promise<FadResponse<TagDefinition>> =>
+      this.definitionGet(namespace, key, options),
+    list: (query: TagDefinitionListQuery = {}, options?: CallOptions): Promise<TagDefinitionPage> =>
+      this.definitionList(query, options),
+    iterate: (query: TagDefinitionListQuery = {}, options?: CallOptions): AsyncGenerator<TagDefinition> =>
+      this.iterateDefinitions(query, options),
+  };
+
+  readonly agentTags = {
+    list: (agentId: string, options?: CallOptions): Promise<FadResponse<AgentTag[]>> => this.tagList(agentId, options),
+    get: (agentId: string, namespace: string, key: string, options?: CallOptions): Promise<AgentTagResult> =>
+      this.tagGet(agentId, namespace, key, options),
+    put: (agentId: string, namespace: string, key: string, body: AgentTagPut, options: TagPutOptions): Promise<AgentTagResult> =>
+      this.tagPut(agentId, namespace, key, body, options),
+    delete: (agentId: string, namespace: string, key: string, options: TagDeleteOptions): Promise<{ requestId?: string }> =>
+      this.tagDelete(agentId, namespace, key, options),
   };
 
   private async healthCall<T extends { status: string }>(
@@ -357,7 +470,7 @@ export class FadClient {
 
   private async sendJson(
     path: string,
-    method: 'POST' | 'PATCH',
+    method: 'POST' | 'PATCH' | 'PUT',
     body: unknown,
     extraHeaders: Record<string, string>,
     signal: AbortSignal | undefined,
@@ -497,6 +610,210 @@ export class FadClient {
       cursor = next;
     }
   }
+
+  private async definitionCreate(body: TagDefinitionCreate, options: IdempotentOptions): Promise<TagDefinitionResult> {
+    requireKey(options.idempotencyKey);
+    const key = await this.resolveKey();
+    const response = await this.sendJson('/v1/tag-definitions', 'POST', body, {
+      'Idempotency-Key': options.idempotencyKey,
+    }, options.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 201 && isTagDefinitionResponse(parsed)) {
+      const location = response.headers.get('location') ?? undefined;
+      return location ? { ...parsed, location } : parsed;
+    }
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async definitionGet(namespace: string, keyName: string, options?: CallOptions): Promise<FadResponse<TagDefinition>> {
+    const key = await this.resolveKey();
+    const path = `/v1/tag-definitions/${encodeURIComponent(namespace)}/${encodeURIComponent(keyName)}`;
+    const response = await this.send(path, true, options?.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isTagDefinitionResponse(parsed)) return parsed;
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async definitionList(query: TagDefinitionListQuery, options?: CallOptions): Promise<TagDefinitionPage> {
+    const params = new URLSearchParams();
+    if (query.namespace) params.set('namespace', query.namespace);
+    if (query.limit !== undefined) params.set('limit', String(query.limit));
+    if (query.cursor) params.set('cursor', query.cursor);
+    const suffix = params.size > 0 ? `?${params.toString()}` : '';
+    const key = await this.resolveKey();
+    const response = await this.send(`/v1/tag-definitions${suffix}`, true, options?.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isTagDefinitionPage(parsed)) return parsed;
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async *iterateDefinitions(query: TagDefinitionListQuery, options?: CallOptions): AsyncGenerator<TagDefinition> {
+    let cursor = query.cursor;
+    for (;;) {
+      const page = await this.definitionList({ ...query, cursor }, options);
+      for (const item of page.data) yield item;
+      const next = page.meta.next_cursor;
+      if (next === null || next === cursor) return;
+      cursor = next;
+    }
+  }
+
+  private async tagList(agentId: string, options?: CallOptions): Promise<FadResponse<AgentTag[]>> {
+    const key = await this.resolveKey();
+    const response = await this.send(`/v1/agents/${encodeURIComponent(agentId)}/tags`, true, options?.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isRecord(parsed) && Array.isArray(parsed.data) && parsed.data.every((item) => isAgentTag(item))
+      && isRecord(parsed.meta) && parsed.meta.api_version === 'v1') {
+      return parsed as unknown as FadResponse<AgentTag[]>;
+    }
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async tagGet(agentId: string, namespace: string, keyName: string, options?: CallOptions): Promise<AgentTagResult> {
+    const key = await this.resolveKey();
+    const path = `/v1/agents/${encodeURIComponent(agentId)}/tags/${encodeURIComponent(namespace)}/${encodeURIComponent(keyName)}`;
+    const response = await this.send(path, true, options?.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isAgentTagResponse(parsed)) return withTagEtag(response, parsed);
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async tagPut(
+    agentId: string,
+    namespace: string,
+    keyName: string,
+    body: AgentTagPut,
+    options: TagPutOptions,
+  ): Promise<AgentTagResult> {
+    requireKey(options.idempotencyKey);
+    assertTagValue(body.value);
+    const match = options.ifMatch !== undefined;
+    const none = options.ifNoneMatch !== undefined;
+    if (match === none) throw new Error('exactly one of ifMatch or ifNoneMatch is required');
+    if (none && options.ifNoneMatch !== '*') throw new Error('ifNoneMatch must be *');
+    const headers: Record<string, string> = { 'Idempotency-Key': options.idempotencyKey };
+    if (match && options.ifMatch) headers['If-Match'] = options.ifMatch;
+    if (none) headers['If-None-Match'] = '*';
+    const key = await this.resolveKey();
+    const path = `/v1/agents/${encodeURIComponent(agentId)}/tags/${encodeURIComponent(namespace)}/${encodeURIComponent(keyName)}`;
+    const response = await this.sendJson(path, 'PUT', { value: body.value, ...(body.reason !== undefined ? { reason: body.reason } : {}) }, headers, options.signal, key);
+    const parsed = await readJson(response, key);
+    if ((response.status === 200 || response.status === 201) && isAgentTagResponse(parsed)) {
+      const result = withTagEtag(response, parsed);
+      const location = response.headers.get('location') ?? undefined;
+      return location ? { ...result, location } : result;
+    }
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async tagDelete(
+    agentId: string,
+    namespace: string,
+    keyName: string,
+    options: TagDeleteOptions,
+  ): Promise<{ requestId?: string }> {
+    requireKey(options.idempotencyKey);
+    if (typeof options.ifMatch !== 'string' || options.ifMatch.length === 0) throw new Error('ifMatch is required');
+    const headers: Record<string, string> = {
+      'Idempotency-Key': options.idempotencyKey,
+      'If-Match': options.ifMatch,
+    };
+    if (options.reason !== undefined) headers['X-Change-Reason'] = options.reason;
+    const key = await this.resolveKey();
+    const path = `/v1/agents/${encodeURIComponent(agentId)}/tags/${encodeURIComponent(namespace)}/${encodeURIComponent(keyName)}`;
+    const response = await this.sendNoBody(path, 'DELETE', headers, options.signal, key);
+    if (response.status === 204) return { requestId: headerRequestId(response) };
+    const parsed = await readJson(response, key);
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async agentSearch(body: AgentSearchInput, options?: CallOptions): Promise<AgentPage> {
+    const key = await this.resolveKey();
+    const response = await this.sendJson('/v1/agents/search', 'POST', body, {}, options?.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isAgentPage(parsed)) return parsed;
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async *iterateSearch(body: AgentSearchInput, options?: CallOptions): AsyncGenerator<Agent> {
+    let cursor = body.cursor;
+    for (;;) {
+      const page = await this.agentSearch({ ...body, cursor }, options);
+      for (const agent of page.data) yield agent;
+      const next = page.meta.next_cursor;
+      if (next === null || next === cursor) return;
+      cursor = next;
+    }
+  }
+
+  private async sendNoBody(
+    path: string,
+    method: 'DELETE',
+    extraHeaders: Record<string, string>,
+    signal: AbortSignal | undefined,
+    key: string,
+  ): Promise<Response> {
+    const started = this.now();
+    const timeout = AbortSignal.timeout(this.timeoutMs);
+    const combined = AbortSignal.any(signal ? [timeout, signal] : [timeout]);
+    const url = new URL(path, this.baseUrl);
+    let attempt = 0;
+    while (true) {
+      if (combined.aborted) {
+        throw abortError(combined.reason instanceof Error ? combined.reason.name : 'AbortError');
+      }
+      const headers = new Headers({ accept: 'application/json', 'user-agent': this.userAgent });
+      headers.set('X-FAD-API-Key', key);
+      for (const [name, value] of Object.entries(extraHeaders)) headers.set(name, value);
+      let response: Response;
+      try {
+        response = await this.fetchImpl(url, { method, headers, redirect: 'error', signal: combined });
+      } catch (error) {
+        if (isAbort(error)) throw abortError(error instanceof Error ? error.name : 'AbortError');
+        if (isRedirect(error)) {
+          const redirect = new Error('Redirects are not followed.');
+          redirect.name = 'FadRedirectError';
+          throw redirect;
+        }
+        const remaining = this.timeoutMs - (this.now() - started);
+        if (attempt < this.maxGetRetries && remaining > 0) {
+          const wait = retryWaitMs({
+            attempt: attempt + 1,
+            retryAfterHeader: null,
+            maxRetryAfterMs: this.maxRetryAfterMs,
+            remainingMs: remaining,
+            random: this.random,
+          });
+          if (!(wait >= remaining && wait > 0)) {
+            attempt += 1;
+            await this.sleep(wait, combined);
+            if (this.now() - started < this.timeoutMs) continue;
+          }
+        }
+        const wrapped = new Error('Network request failed');
+        wrapped.name = 'FadNetworkError';
+        throw wrapped;
+      }
+      const retryable = response.status === 429 || response.status === 503;
+      const remaining = this.timeoutMs - (this.now() - started);
+      if (retryable && attempt < this.maxGetRetries && remaining > 0) {
+        const wait = retryWaitMs({
+          attempt: attempt + 1,
+          retryAfterHeader: response.headers.get('retry-after'),
+          maxRetryAfterMs: this.maxRetryAfterMs,
+          remainingMs: remaining,
+          random: this.random,
+        });
+        if (wait >= remaining && wait > 0) return response;
+        attempt += 1;
+        await response.arrayBuffer().catch(() => undefined);
+        await this.sleep(wait, combined);
+        if (this.now() - started >= this.timeoutMs) return response;
+        continue;
+      }
+      return response;
+    }
+  }
 }
 
 async function readJson(response: Response, secret: string): Promise<unknown> {
@@ -577,4 +894,82 @@ function isAgentPage(value: unknown): value is AgentPage {
     && value.meta.api_version === 'v1'
     && typeof value.meta.limit === 'number'
     && (typeof next === 'string' || next === null);
+}
+
+function requireKey(value: string): void {
+  if (typeof value !== 'string' || value.length === 0) throw new Error('idempotencyKey is required');
+}
+
+function assertTagValue(value: TagValue): void {
+  if (typeof value === 'boolean') return;
+  if (typeof value === 'string') {
+    if (value.length === 0 || [...value].length > 128) throw new Error('tag value is invalid');
+    return;
+  }
+  if (typeof value === 'number' && Number.isInteger(value) && value >= -1_000_000_000 && value <= 1_000_000_000) return;
+  throw new Error('tag value is invalid');
+}
+
+function isTagValue(value: unknown): value is TagValue {
+  if (typeof value === 'boolean') return true;
+  if (typeof value === 'string') return value.length > 0;
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isTagDefinition(value: unknown): value is TagDefinition {
+  if (!isRecord(value)) return false;
+  const enums = value.enum_values;
+  return typeof value.organization_id === 'string'
+    && typeof value.namespace === 'string'
+    && typeof value.key === 'string'
+    && (value.value_type === 'string' || value.value_type === 'integer' || value.value_type === 'boolean' || value.value_type === 'enum')
+    && (enums === null || (Array.isArray(enums) && enums.every((item) => typeof item === 'string')))
+    && typeof value.governed === 'boolean'
+    && (value.visibility === 'internal' || value.visibility === 'restricted')
+    && typeof value.description === 'string'
+    && typeof value.created_by === 'string'
+    && typeof value.created_at === 'string';
+}
+
+function isTagDefinitionResponse(value: unknown): value is FadResponse<TagDefinition> {
+  return isRecord(value) && isTagDefinition(value.data) && isRecord(value.meta)
+    && typeof value.meta.request_id === 'string' && value.meta.api_version === 'v1';
+}
+
+function isTagDefinitionPage(value: unknown): value is TagDefinitionPage {
+  if (!isRecord(value) || !Array.isArray(value.data) || !isRecord(value.meta)) return false;
+  const next = value.meta.next_cursor;
+  return value.data.every((item) => isTagDefinition(item))
+    && typeof value.meta.request_id === 'string'
+    && value.meta.api_version === 'v1'
+    && typeof value.meta.limit === 'number'
+    && (typeof next === 'string' || next === null);
+}
+
+function isAgentTag(value: unknown): value is AgentTag {
+  if (!isRecord(value)) return false;
+  return typeof value.agent_id === 'string'
+    && typeof value.namespace === 'string'
+    && typeof value.key === 'string'
+    && isTagValue(value.value)
+    && typeof value.revision === 'number'
+    && typeof value.governed === 'boolean'
+    && (value.visibility === 'internal' || value.visibility === 'restricted')
+    && typeof value.created_by === 'string'
+    && typeof value.updated_by === 'string'
+    && typeof value.created_at === 'string'
+    && typeof value.updated_at === 'string';
+}
+
+function isAgentTagResponse(value: unknown): value is FadResponse<AgentTag> {
+  return isRecord(value) && isAgentTag(value.data) && isRecord(value.meta)
+    && typeof value.meta.request_id === 'string' && value.meta.api_version === 'v1';
+}
+
+function withTagEtag(response: Response, parsed: FadResponse<AgentTag>): AgentTagResult {
+  const etag = response.headers.get('etag') ?? '';
+  if (!/^"tag-v[1-9][0-9]*"$/.test(etag)) {
+    throw new FadApiError(response.status, 'INVALID_RESPONSE', 'Response did not include a strong ETag', headerRequestId(response));
+  }
+  return { ...parsed, etag };
 }

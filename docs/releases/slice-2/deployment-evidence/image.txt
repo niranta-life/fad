@@ -1,0 +1,4 @@
+slice2_id=sha256:71d6dcf27db2f73ae71c564e63bbde8993f36f584a02bece2703c02b5cd2db50
+slice2_os=linux/arm64
+slice2_node=v24.22.0
+slice1_id=sha256:97f4db1dd59a83ba747b785f0c6334233c7e90dcbd2a31fd35983b0fa2394c60

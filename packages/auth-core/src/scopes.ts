@@ -1,9 +1,14 @@
-/** Exact scope strings. Slice 1 names are provisionable and do not imply routes. */
+/** Exact scope strings. Later names are additive and do not widen older scopes. */
 export const KNOWN_SCOPES = [
   'organizations:read',
   'agents:read',
   'agents:write',
   'agents:lifecycle',
+  'tags:define',
+  'tags:read',
+  'tags:write',
+  'tags:governance',
+  'tags:restricted:read',
 ] as const;
 
 export type KnownScope = (typeof KNOWN_SCOPES)[number];

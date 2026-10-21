@@ -77,7 +77,7 @@ export async function beginIdempotency(
   input: {
     organizationId: string;
     principalId: string;
-    method: 'POST' | 'PATCH';
+    method: 'POST' | 'PATCH' | 'PUT' | 'DELETE';
     resourcePath: string;
     idemKey: string;
     requestSha256: Buffer;

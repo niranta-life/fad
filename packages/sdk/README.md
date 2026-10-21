@@ -1,6 +1,6 @@
 # @fad/sdk
 
-Network client for the FAD HTTP API. Version 0.2.0 adds agent registration and lifecycle. Version 0.1.0 clients keep `health` and `organizations.current`.
+Network client for the FAD HTTP API. Version 0.3.0 adds typed tag definitions, agent tags, and tag search. Version 0.2.0 adds agent registration and lifecycle. Version 0.1.0 clients keep `health` and `organizations.current`.
 
 ```ts
 import { FadClient } from '@fad/sdk';

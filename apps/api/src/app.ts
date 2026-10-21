@@ -3,17 +3,23 @@ import { randomUUID } from 'node:crypto';
 import Fastify, { LogController, type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { redactText } from '@fad/auth-core';
 import { contract, errorEnvelope, successEnvelope, type ErrorCode } from '@fad/contract';
-import { cleanupRateLimits, consumeRateLimit, isDependencyError, rateLimitBucket, readMigrationFiles } from '@fad/db';
+import { TAG_MIGRATION_VERSION, cleanupRateLimits, consumeRateLimit, isDependencyError, rateLimitBucket, readMigrationFiles } from '@fad/db';
 import type { Pool } from 'pg';
 import { registerAgentRoutes } from './agent-routes.js';
+import { registerTagRoutes } from './tag-routes.js';
 import { resolveCurrentOrganization } from './auth.js';
 import type { AppConfig } from './config.js';
 
 const PATHS = new Set(['/health/live', '/health/ready', '/v1/organizations/current', '/v1/agents']);
 const AGENT_PATH = /^\/v1\/agents\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?:\/(?:suspend|activate|retire))?$/i;
+const TAG_DEFINITION_PATH = /^\/v1\/tag-definitions\/[a-z][a-z0-9_-]{0,39}\/[a-z][a-z0-9_-]{0,39}$/;
+const AGENT_TAGS_PATH = /^\/v1\/agents\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/tags(?:\/[a-z][a-z0-9_-]{0,39}\/[a-z][a-z0-9_-]{0,39})?$/i;
 
-function knownPath(path: string): boolean {
-  return PATHS.has(path) || AGENT_PATH.test(path);
+function knownPath(path: string, tagsEnabled: boolean): boolean {
+  if (PATHS.has(path) || AGENT_PATH.test(path)) return true;
+  if (!tagsEnabled) return false;
+  if (path === '/v1/tag-definitions' || path === '/v1/agents/search') return true;
+  return TAG_DEFINITION_PATH.test(path) || AGENT_TAGS_PATH.test(path);
 }
 
 export interface AppHandle {
@@ -109,6 +115,12 @@ export async function buildApp(options: {
   app.addHook('onRequest', async (request, reply) => {
     reply.header('x-request-id', request.id);
     reply.header('x-content-type-options', 'nosniff');
+    const path = request.url.split('?')[0] ?? '';
+    if (config.tagsEnabled && path === '/v1/agents/search' && request.method !== 'POST') {
+      sendError(reply, String(request.id), 405, 'METHOD_NOT_ALLOWED');
+      return reply;
+    }
+    return undefined;
   });
 
   app.addHook('preParsing', async (request, reply, payload) => {
@@ -160,7 +172,7 @@ export async function buildApp(options: {
   app.setNotFoundHandler((request, reply) => {
     const path = request.url.split('?')[0] ?? '';
     const requestId = String(request.id);
-    if (knownPath(path)) return sendError(reply, requestId, 405, 'METHOD_NOT_ALLOWED');
+    if (knownPath(path, config.tagsEnabled)) return sendError(reply, requestId, 405, 'METHOD_NOT_ALLOWED');
     return sendError(reply, requestId, 404, 'NOT_FOUND');
   });
 
@@ -174,6 +186,15 @@ export async function buildApp(options: {
     try {
       const ready = await migrationsMatch(pool, config.migrationsDir);
       if (!ready) return send(reply, requestId, 503, { status: 'not_ready' }, 'HealthUnavailable', 'no-store');
+      if (config.tagsEnabled) {
+        const tagSchema = await pool.query(
+          'SELECT 1 FROM schema_migrations WHERE version = $1',
+          [TAG_MIGRATION_VERSION],
+        );
+        if ((tagSchema.rowCount ?? 0) !== 1) {
+          return send(reply, requestId, 503, { status: 'not_ready' }, 'HealthUnavailable', 'no-store');
+        }
+      }
       await pool.query('SELECT 1');
       return send(reply, requestId, 200, { status: 'ready' }, 'Readiness', 'no-store');
     } catch {
@@ -220,6 +241,17 @@ export async function buildApp(options: {
     limitRequest,
     migrationsMatch,
   });
+
+  if (config.tagsEnabled) {
+    registerTagRoutes(app, {
+      pool,
+      config,
+      send,
+      sendError,
+      limitRequest,
+      migrationsMatch,
+    });
+  }
 
   return {
     app,

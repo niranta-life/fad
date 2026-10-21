@@ -26,6 +26,12 @@ export interface AppConfig {
   rateLimitWindowSeconds: number;
   migrationsDir: string;
   ssl: false | { rejectUnauthorized: boolean };
+  tagsEnabled: boolean;
+  tagMaxPerAgent: number;
+  tagDefinitionsMaxPerOrg: number;
+  tagSearchMaxPredicates: number;
+  tagSearchMaxLimit: number;
+  tagWriteBodyMaxBytes: number;
 }
 
 function integer(name: string, fallback: number, min: number, max: number, env: NodeJS.ProcessEnv): number {
@@ -132,5 +138,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     rateLimitWindowSeconds: integer('FAD_RATE_LIMIT_WINDOW_SECONDS', 60, 1, 3600, env),
     migrationsDir,
     ssl,
+    tagsEnabled: env.FAD_TAGS_ENABLED === 'true',
+    tagMaxPerAgent: integer('FAD_TAG_MAX_PER_AGENT', 64, 1, 64, env),
+    tagDefinitionsMaxPerOrg: integer('FAD_TAG_DEFINITIONS_MAX_PER_ORG', 256, 1, 256, env),
+    tagSearchMaxPredicates: integer('FAD_TAG_SEARCH_MAX_PREDICATES', 8, 1, 8, env),
+    tagSearchMaxLimit: integer('FAD_TAG_SEARCH_MAX_LIMIT', 100, 1, 100, env),
+    tagWriteBodyMaxBytes: integer('FAD_TAG_WRITE_BODY_MAX_BYTES', 16_384, 1, 16_384, env),
   };
 }

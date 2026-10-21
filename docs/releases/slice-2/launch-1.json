@@ -1,0 +1,12 @@
+200 {"status":"ok"}
+200 {"status":"ready"}
+200 {"data":{"id":"36ff58c2-80de-46b3-97fb-2a9c02b06763","name":"HTTP Org A","status":"active","created_at":"2026-10-21T05:07:01.847Z"},"meta":{"request_id":"499ba146-aac3-4f2e-afea-62f2ca1cda8c","api_version":"v1"}}
+200 {"data":{"id":"d59116e9-0d0e-4bea-8b09-db700fbcfc5f","name":"HTTP Org B","status":"active","created_at":"2026-10-21T05:07:01.898Z"},"meta":{"request_id":"cb182108-74a7-4b9e-ab05-b1a2889b6b29","api_version":"v1"}}
+200 {"data":{"id":"36ff58c2-80de-46b3-97fb-2a9c02b06763","name":"HTTP Org A","status":"active","created_at":"2026-10-21T05:07:01.847Z"},"meta":{"request_id":"3f78f20c-8d5e-41a7-95d9-a8aa3732b271","api_version":"v1"}}
+400 {"error":{"code":"VALIDATION_ERROR","message":"Invalid request."},"meta":{"request_id":"6c6ab1b1-7446-46c3-84ca-3f325be3c176","api_version":"v1"}}
+401 {"error":{"code":"UNAUTHORIZED","message":"Invalid or missing API credential."},"meta":{"request_id":"9d2edac9-9bf2-466c-b9e5-3cf33ebf5969","api_version":"v1"}}
+401 {"error":{"code":"UNAUTHORIZED","message":"Invalid or missing API credential."},"meta":{"request_id":"19a8b280-8f9a-4814-9802-5d5eeb4057f7","api_version":"v1"}}
+401 {"error":{"code":"UNAUTHORIZED","message":"Invalid or missing API credential."},"meta":{"request_id":"5ebd20f0-e13d-4154-b1ce-ab4dc28220fa","api_version":"v1"}}
+401 {"error":{"code":"UNAUTHORIZED","message":"Invalid or missing API credential."},"meta":{"request_id":"35b699ef-ee64-4d7d-8506-3870efc7dfe3","api_version":"v1"}}
+403 {"error":{"code":"FORBIDDEN","message":"Insufficient permission."},"meta":{"request_id":"e07f2c92-2a5e-4a40-9521-0c7a10e753c0","api_version":"v1"}}
+405 {"error":{"code":"METHOD_NOT_ALLOWED","message":"Method not allowed."},"meta":{"request_id":"30760b37-a643-4547-a414-49b95a2d1df2","api_version":"v1"}}

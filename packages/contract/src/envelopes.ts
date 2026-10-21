@@ -16,6 +16,10 @@ export const ERRORS = {
   PRECONDITION_FAILED: 'The agent has changed. Fetch its current representation and retry.',
   PRECONDITION_REQUIRED: 'If-Match is required.',
   UNSUPPORTED_MEDIA_TYPE: 'Content-Type must be application/json.',
+  TAG_DEFINITION_NOT_FOUND: 'Tag definition not found.',
+  TAG_ASSIGNMENT_NOT_FOUND: 'Tag assignment not found.',
+  TAG_DEFINITION_EXISTS: 'The tag definition already exists.',
+  INVALID_AGENT_STATE: 'The agent status does not allow this tag change.',
 } as const;
 
 export type ErrorCode = keyof typeof ERRORS;

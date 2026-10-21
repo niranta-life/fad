@@ -1,0 +1,7 @@
+ready=true
+define=201
+assign=201 read_value=false tag_etag="tag-v1"
+agent_etag_before="agent-v1" agent_etag_after="agent-v1"
+search=200 found=true
+governed=201 denied=403 denied_code=FORBIDDEN
+PASS launch

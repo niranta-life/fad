@@ -1,10 +1,15 @@
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 
 const publishedPath = new URL('../contracts/openapi.yaml', import.meta.url);
 const packagePath = new URL('../plans/fad-slice-0/contracts/openapi.yaml', import.meta.url);
+const slice1Path = new URL('../docs/releases/slice-1/contract-openapi.yaml', import.meta.url);
 const SLICE0_SHA256 = 'bb5a6dc96ae93fb42ed6b69af1770cd435bba43809c8942b0702d9a748beb4cc';
+const PARENT_COMMIT = '566bf826993bb7d783de6ea080bc0f4a9bc0d139';
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head'];
 const AGENT_OPERATIONS = [
   ['post', '/v1/agents'],
@@ -14,6 +19,16 @@ const AGENT_OPERATIONS = [
   ['post', '/v1/agents/{agentId}/suspend'],
   ['post', '/v1/agents/{agentId}/activate'],
   ['post', '/v1/agents/{agentId}/retire'],
+];
+const TAG_OPERATIONS = [
+  ['post', '/v1/tag-definitions'],
+  ['get', '/v1/tag-definitions'],
+  ['get', '/v1/tag-definitions/{namespace}/{key}'],
+  ['get', '/v1/agents/{agentId}/tags'],
+  ['get', '/v1/agents/{agentId}/tags/{namespace}/{key}'],
+  ['put', '/v1/agents/{agentId}/tags/{namespace}/{key}'],
+  ['delete', '/v1/agents/{agentId}/tags/{namespace}/{key}'],
+  ['post', '/v1/agents/search'],
 ];
 
 function load(url) {
@@ -32,6 +47,7 @@ function same(left, right) {
 
 const published = load(publishedPath);
 const packaged = load(packagePath);
+const slice1 = load(slice1Path);
 const packageSha = createHash('sha256').update(packaged.text).digest('hex');
 const publishedSha = createHash('sha256').update(published.text).digest('hex');
 const breaking = [];
@@ -73,11 +89,81 @@ if (scheme?.type !== 'apiKey' || scheme.in !== 'header' || scheme.name !== 'X-FA
   breaking.push('credential header is not X-FAD-API-Key');
 }
 
-const added = [];
+const slice1Paths = Object.keys(slice1.doc.paths ?? {}).sort();
+for (const path of slice1Paths) {
+  if (published.doc.paths?.[path] == null) {
+    breaking.push(`removed slice1 path ${path}`);
+    continue;
+  }
+  for (const method of operations(slice1.doc, path)) {
+    if (published.doc.paths[path][method] == null) {
+      breaking.push(`removed slice1 ${method} ${path}`);
+      continue;
+    }
+    if (!same(slice1.doc.paths[path][method], published.doc.paths[path][method])) {
+      breaking.push(`changed slice1 ${method} ${path}`);
+    }
+  }
+}
+for (const section of ['schemas', 'responses', 'headers', 'parameters', 'securitySchemes']) {
+  const before = slice1.doc.components?.[section] ?? {};
+  const after = published.doc.components?.[section] ?? {};
+  for (const key of Object.keys(before)) {
+    if (!same(before[key], after[key])) breaking.push(`changed slice1 components.${section}.${key}`);
+  }
+}
+
+const slice1Present = [];
 for (const [method, path] of AGENT_OPERATIONS) {
+  if (published.doc.paths?.[path]?.[method] == null) breaking.push(`missing ${method} ${path}`);
+  else slice1Present.push(`${method} ${path}`);
+}
+const added = [];
+for (const [method, path] of TAG_OPERATIONS) {
   if (published.doc.paths?.[path]?.[method] == null) breaking.push(`missing ${method} ${path}`);
   else added.push(`${method} ${path}`);
 }
+
+const parentText = execFileSync('git', ['show', `${PARENT_COMMIT}:contracts/openapi.yaml`], { cwd: repoRoot });
+const parentDoc = parse(parentText.toString('utf8'));
+const preexisting = [];
+for (const path of Object.keys(parentDoc.paths ?? {}).sort()) {
+  for (const method of operations(parentDoc, path)) {
+    const live = published.doc.paths?.[path]?.[method];
+    if (live == null) {
+      breaking.push(`removed parent ${method} ${path}`);
+      continue;
+    }
+    if (!same(parentDoc.paths[path][method], live)) breaking.push(`changed parent ${method} ${path}`);
+    else preexisting.push(`${method} ${path}`);
+  }
+}
+const parentNew = [];
+for (const path of Object.keys(published.doc.paths ?? {}).sort()) {
+  for (const method of operations(published.doc, path)) {
+    if (parentDoc.paths?.[path]?.[method] == null) parentNew.push(`${method} ${path}`);
+  }
+}
+const expectedNew = TAG_OPERATIONS.map(([method, path]) => `${method} ${path}`).sort();
+const parentNewSorted = [...parentNew].sort();
+if (!same(parentNewSorted, expectedNew)) {
+  breaking.push(`parent new operations are not exactly the eight tag routes: ${parentNew.join(', ')}`);
+}
+for (const key of ['openapi', 'servers', 'security']) {
+  if (!same(parentDoc[key], published.doc[key])) breaking.push(`changed parent ${key}`);
+}
+for (const section of ['schemas', 'responses', 'headers', 'parameters', 'securitySchemes']) {
+  const before = parentDoc.components?.[section] ?? {};
+  const after = published.doc.components?.[section] ?? {};
+  for (const key of Object.keys(before)) {
+    if (!same(before[key], after[key])) breaking.push(`changed parent components.${section}.${key}`);
+  }
+}
+const documentChanges = [];
+if (!same(parentDoc.info, published.doc.info)) documentChanges.push('info');
+if (!same(parentDoc.tags, published.doc.tags)) documentChanges.push('tags');
+const parentPreexistingDeepEqual = preexisting.length > 0
+  && !breaking.some((item) => item.startsWith('changed parent') || item.startsWith('removed parent'));
 
 const preserved = [];
 for (const path of slice0Paths) {
@@ -89,7 +175,14 @@ const report = {
   slice0_package_sha256: packageSha,
   slice0_package_unchanged: packageSha === SLICE0_SHA256,
   published_sha256: publishedSha,
+  parent_commit: PARENT_COMMIT,
+  parent_preexisting_operations: preexisting,
+  parent_preexisting_deep_equal: parentPreexistingDeepEqual,
+  parent_new_operations: parentNewSorted,
+  parent_new_operations_are_only_tag_routes: same(parentNewSorted, expectedNew),
+  document_changes: documentChanges,
   preserved_operations: preserved,
+  slice1_operations: slice1Present,
   added_operations: added,
   breaking,
 };
