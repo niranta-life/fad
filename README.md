@@ -1,118 +1,397 @@
 # Federated Agent Directory
 
-The Federated Agent Directory (FAD) is the control service for a future directory of enterprise agents. This repository contains Slice 0 and Slice 1. Slice 0 is the secure foundation. Slice 1 registers and manages agents.
+The Federated Agent Directory (FAD) is the control service for the agents in an organization. An administrator runs the service. A developer calls it from an agent with the TypeScript client `@fad/sdk`.
 
-## Contents of Slice 0
+The service does three things:
 
-Slice 0 contains these parts:
+- It binds every API key to one organization.
+- It registers that organization's agents.
+- It keeps a directory status for each agent: `active`, `suspended`, or `retired`.
 
-- A Node.js HTTP API.
-- A PostgreSQL 16 database.
-- An offline administration program, `fad-admin`.
-- A TypeScript client, `@fad/sdk`.
-- A container image and a local Docker Compose stack.
+Each agent receives a stable id, a global URN of the form `urn:fad:agent:<organization-uuid>:<agent-uuid>`, and a revision. A real change writes an audit row. One organization cannot read or change another organization's agents. The directory records the agent. The agent process does its own work. A status of `active` is a directory fact, and another system still decides whether to call the agent.
 
-The API has three routes:
+The repository contains a Node.js HTTP API, a PostgreSQL 16 database, the offline program `fad-admin`, the client `@fad/sdk` 0.2.0, and a container image with a local Docker Compose stack. The HTTP contract is `contracts/openapi.yaml`. The API version in every success and error body is `v1`.
 
-- `GET /health/live` shows that the process is alive.
-- `GET /health/ready` shows that the database and the schema are ready.
-- `GET /v1/organizations/current` returns the organization of the API key.
+- [Server](#server) is for the administrator who runs the service and issues keys.
+- [Client](#client) is the call reference, with examples.
+- [Use the client in an agent](#use-the-client-in-an-agent) is the startup path a developer puts in an agent.
 
-The OpenAPI description is `contracts/openapi.yaml`.
+## Server
 
-## Limits of Slice 0
+You run four parts: PostgreSQL 16, a migration job, the API, and `fad-admin`. The API serves HTTP. `fad-admin` talks to PostgreSQL and is the only way to create an organization, a service principal, or an API key. Callers never send those commands to the API.
 
-Slice 0 does not register agents. Slice 0 does not serve tags, policies, discovery, or delegation. Slice 0 does not serve federation, MCP, or OAuth. Slice 0 does not call an agent. Slice 0 has no user interface. Slice 0 has no public user registration.
+You need Node.js 22 or later on a workstation that builds or runs `fad-admin`. The container image uses Node.js 24. You need Docker when you use the Compose stack.
 
-## Agent registration
+### Start the local stack
 
-Slice 1 uses the same API, the same API key, and the same database. A key with `agents:write` can register an agent. The organization can get, list, and update that agent. A key with `agents:lifecycle` can suspend, activate, or retire it. Another organization receives status 404. Retired agents stay readable. They cannot be activated or edited. `@fad/sdk` 0.2.0 calls these routes. Slice 1 does not add tags, discovery, policy, delegation, federation, or MCP.
+Copy `.env.example` to a file you do not commit. Set `FAD_DEV_POSTGRES_PASSWORD`, `FAD_APP_DB_PASSWORD`, and `FAD_API_KEY_PEPPER_V1`. The pepper is a random secret of at least 32 bytes and at least 8 distinct byte values. The API rejects a short pepper, a low-diversity pepper, and a well-known placeholder. Every API replica and `fad-admin` use this same pepper. The database stores an HMAC-SHA256 verifier for each key. It does not store the key secret.
 
-## Security rules
-
-Send the API key in the header `X-FAD-API-Key`. The API uses the organization of that key. The caller cannot select a different organization. A query that selects an organization returns status 400. The header `X-Organization-Id` has no effect.
-
-The database stores a key verifier. The database does not store the key secret. The verifier is an HMAC-SHA256 digest. The pepper comes from the secret store. The program `fad-admin` shows a new key one time. Store that key in the secret store.
-
-Each table isolates rows by organization. The runtime role `fad_app` cannot bypass that isolation. The API does not change the database schema when the API starts. Run migrations in a separate job.
-
-## Requirements
-
-You need Node.js 22 or later. The container uses Node.js 24. You need PostgreSQL 16. You need Docker when you use the Compose stack.
-
-## Build the programs
-
-Run these commands at the root of the repository:
-
-1. Run `npm ci`.
-2. Run `npm run build`.
-
-## Start the local stack
-
-1. Copy `.env.example` to a file that you do not commit.
-2. Set `FAD_DEV_POSTGRES_PASSWORD`, `FAD_APP_DB_PASSWORD`, and `FAD_API_KEY_PEPPER_V1` in that file. The pepper must contain at least 32 bytes.
-3. Run this command:
+From the repository root:
 
 ```sh
 docker compose --env-file /path/to/dev.env -f deploy/docker/compose.yaml up --build
 ```
 
-Compose starts PostgreSQL 16. Compose then runs the migration job. Compose then starts the API. The API listens on `127.0.0.1` port `8080`.
+Compose starts PostgreSQL 16, runs the migration job once, and then starts the API. The API listens on `127.0.0.1` port `8080`. The API process does not change the schema. PostgreSQL is on the Compose network and is not published to the host.
 
-Do these checks:
+Confirm the process and the schema:
 
 ```sh
 curl -fsS http://127.0.0.1:8080/health/live
 curl -fsS http://127.0.0.1:8080/health/ready
 ```
 
-## Create an organization and a key
+`/health/live` returns `{"status":"ok"}` when the process is up. `/health/ready` returns `{"status":"ready"}` when the database is reachable and the applied migrations match the files in the image. A database outage or a migration mismatch returns `{"status":"not_ready"}` with status 503.
 
-Run `fad-admin` on a trusted computer. Set `FAD_BOOTSTRAP_DATABASE_URL` and `FAD_API_KEY_PEPPER_V1`. Do not create a key through HTTP.
+### Issue an organization and keys
 
-```sh
-node apps/admin/dist/main.js organization create --name "Organization A"
-node apps/admin/dist/main.js principal create --organization-id <uuid> --type service --name "Service A"
-node apps/admin/dist/main.js credential issue --organization-id <uuid> --principal-id <uuid> --scopes organizations:read
-```
+Run `fad-admin` on a trusted computer. Set `FAD_BOOTSTRAP_DATABASE_URL` to a login that can `SET ROLE fad_bootstrap`. Set `FAD_API_KEY_PEPPER_V1` to the pepper the API uses. The runtime login `fad_app` cannot issue keys. In production, grant `fad_bootstrap` to the operator login and keep that grant off `fad_app`.
 
-To revoke a key, run:
+On the local stack, load the env file and point the bootstrap URL at the Compose network. The local superuser can assume `fad_bootstrap` after the migration job has finished:
 
 ```sh
-node apps/admin/dist/main.js credential revoke --organization-id <uuid> --kid <kid> --reason rotation
+set -a
+. /path/to/dev.env
+set +a
+export FAD_BOOTSTRAP_DATABASE_URL="postgres://postgres:${FAD_DEV_POSTGRES_PASSWORD}@postgres:5432/fad"
+
+docker compose --env-file /path/to/dev.env -f deploy/docker/compose.yaml run --rm --no-deps \
+  -e FAD_BOOTSTRAP_DATABASE_URL \
+  api \
+  node apps/admin/dist/main.js organization create --name "Organization A"
 ```
 
-## Read the current organization
+On a workstation that can already reach PostgreSQL, build first and use the npm script:
 
-Send the key in `X-FAD-API-Key`. The route requires the scope `organizations:read`.
+```sh
+npm ci
+npm run build
+export FAD_BOOTSTRAP_DATABASE_URL="postgres://..."
+export FAD_API_KEY_PEPPER_V1="..."
+npm run fad-admin -- organization create --name "Organization A"
+```
+
+Each command prints one JSON object on stdout. `organization create` returns `id`. Use that id as `--organization-id` for the next commands. `principal create` returns the principal `id`. Give that id to the developer as `FAD_OWNER_PRINCIPAL_ID`. The only principal type you can create is `service`.
+
+```sh
+npm run fad-admin -- principal create \
+  --organization-id <organization-uuid> \
+  --type service \
+  --name "Accounts Payable"
+```
+
+`credential issue` prints the API key in the field `api_key` and writes a one-line warning to stderr. The key looks like `fad_live.<kid>.<secret>`. Store it in the secret store immediately. The program shows that secret once. `credential list` prints the key id, principal, scopes, and status. It prints neither the secret nor the verifier.
+
+Issue a separate key for each program. Repeat `--scopes` or pass a comma-separated list. A scope must be one of the names below. A wildcard is rejected.
+
+```sh
+npm run fad-admin -- credential issue \
+  --organization-id <organization-uuid> \
+  --principal-id <principal-uuid> \
+  --scopes organizations:read,agents:write
+```
+
+Optional `--expires-at` takes a future timestamp. A missing expiry leaves the key active until you revoke it.
+
+| Scope | Give it to | What the holder can do |
+| --- | --- | --- |
+| `organizations:read` | Any program that must confirm which organization its key belongs to | `GET /v1/organizations/current` |
+| `agents:read` | The running agent | Read one agent, list agents, and walk every page in its organization |
+| `agents:write` | The deploy job, or the agent process when that process registers itself | Register an agent and edit its name, description, or owner |
+| `agents:lifecycle` | An operator tool | Suspend, activate, or retire an agent |
+
+A registrar key needs `organizations:read` and `agents:write`. A running agent that loads its record and lists peers needs `agents:read`. Keep `agents:lifecycle` on the operator tool. Suspending, activating, and retiring are administrator actions.
+
+Confirm a new key from the workstation:
 
 ```sh
 curl -fsS http://127.0.0.1:8080/v1/organizations/current \
-  -H "X-FAD-API-Key: <key>"
+  -H "X-FAD-API-Key: $FAD_API_KEY"
 ```
 
-A success body has `data` and `meta`. The field `meta.api_version` is `v1`. An error body has `error` and `meta`. A missing key, a bad key, an expired key, or a revoked key returns status 401. A valid key without the scope `organizations:read` returns status 403. A database outage returns status 503.
+A success body has `data` and `meta`. `data.id` is the organization of the key. An error body has `error` and `meta`. A missing, unknown, expired, or revoked key returns status 401, as does a key whose principal or organization is inactive. A valid key without the required scope returns status 403. A database outage on an authenticated route returns status 503. Send the key only in `X-FAD-API-Key`. The header `X-Organization-Id` has no effect. A query parameter that names an organization returns status 400. The key selects the organization.
 
-## Use the client
+### Operate the directory
 
-Install `@fad/sdk` from this repository. Create a client with the base URL and the API key. Call `health.live()`, `health.ready()`, or `organizations.current()`. The client retries only a safe GET request. You can cancel a call with an `AbortSignal`. The client does not log the API key.
+To register an agent yourself with curl, send `agents:write`, a JSON body, and an `Idempotency-Key` of 8 to 128 characters from `A-Z`, `a-z`, `0-9`, and `.`, `_`, `:`, `-`. The server chooses the agent id, the URN, the initial status `active`, and revision 1. The response carries `ETag` and `Location`. The same key and the same body, from the same principal, replay the original result for 24 hours. After that record expires, the same key is a new request.
+
+```sh
+curl -fsS -D - http://127.0.0.1:8080/v1/agents \
+  -H "X-FAD-API-Key: $FAD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: register-accounts-payable" \
+  -d '{"name":"Accounts Payable Agent","owner_principal_id":"<principal-uuid>"}'
+```
+
+A name is 1 to 160 Unicode code points after trim. A description is optional and at most 2000 code points. The owner must be a service principal in the same organization.
+
+Later edits and status changes require `If-Match` with the current strong ETag, for example `"agent-v1"`, including the quotes. Read `GET /v1/agents/<agent-id>` first. `PATCH /v1/agents/<agent-id>` changes name, description, or owner and requires `agents:write`. Send `description: null` to clear the description. Status changes use `POST /v1/agents/<agent-id>/suspend`, `/activate`, or `/retire`, require `agents:lifecycle`, and take `{"reason":"..."}`. The reason is 1 to 500 code points and is stored in lifecycle history. A retired agent stays readable. It cannot be edited or activated. A repeated suspend, activate, or retire of an agent already in that status leaves the revision unchanged. A missing agent and an agent in another organization both return status 404.
+
+List with `GET /v1/agents`. Optional query fields are `status` (`active`, `suspended`, or `retired`), `limit` (default 25, maximum 100), and `cursor`. Any other query parameter returns status 400. Pages are ordered by `created_at` descending, then id descending. `meta.next_cursor` is null on the last page.
+
+The default limit is 60 authenticated requests per key per 60 seconds. A limited call returns status 429 and `Retry-After`. Change the ceiling with `FAD_RATE_LIMIT_MAX` and `FAD_RATE_LIMIT_WINDOW_SECONDS`. `FAD_RATE_LIMIT_BACKEND` stays `postgres`.
+
+### Rotate a key and stop a caller
+
+Issue the successor with the scopes that program needs. Store it, point the program at it, and call `GET /v1/organizations/current`. Then revoke the predecessor. Revoking a key that is already revoked succeeds and reports `already_revoked`.
+
+```sh
+npm run fad-admin -- credential list --organization-id <organization-uuid>
+npm run fad-admin -- credential revoke \
+  --organization-id <organization-uuid> \
+  --kid <kid> \
+  --reason rotation
+```
+
+`organization suspend --organization-id <uuid> --reason <text>` stops every key in that organization. `principal disable --organization-id <uuid> --principal-id <uuid> --reason <text>` stops that principal's keys. Both require a reason of 1 to 160 characters. A lost key is revoked the same way. Replacing the pepper is a new pepper value plus newly issued keys. The API refuses to start when the pepper is missing or weak.
+
+### Run it in production
+
+Put a TLS-terminating proxy in front of the API. The API process does not terminate public TLS. Run at least two API replicas. Keep PostgreSQL unpublished. Apply roles and migrations with a privileged job, then start the API as `fad_app`.
+
+Production startup requires all of the following:
+
+- `NODE_ENV=production`
+- `FAD_INGRESS_TLS=terminated`
+- `FAD_TRUST_PROXY=true` and `FAD_TRUSTED_PROXIES` set to the proxy CIDRs
+- `DATABASE_URL` with `sslmode=require`, `sslmode=verify-ca`, or `sslmode=verify-full`
+- `FAD_API_KEY_PEPPER_V1` set from the secret store
+- `FAD_RATE_LIMIT_BACKEND=postgres`
+- A connected role that is not a superuser, lacks `BYPASSRLS`, and cannot read `api_credentials`
+- A migrations directory whose files match `schema_migrations`
+
+The migration commands are `node apps/migrator/dist/main.js roles`, `up`, and `bootstrap`. `bootstrap` applies roles and then migrations. Set `FAD_MIGRATOR_DATABASE_URL` and, for roles, `FAD_APP_DB_PASSWORD`. A checksum mismatch or a missing migration fails API startup and readiness.
+
+`SIGTERM` marks the process not ready, stops accepting connections, closes the pool, and exits 0. Set `FAD_SHUTDOWN_GRACE_MS` to at least `FAD_HTTP_REQUEST_TIMEOUT_MS`. A committed audit row stays committed across shutdown.
+
+The proxy must not write `X-FAD-API-Key` into access logs. The API does not log the key, the verifier, the pepper, or the database URL. Read `docs/operations/RUNBOOK.md` for backup, restore, and shutdown. The routes in this README are the current API.
+
+## Client
+
+`@fad/sdk` is the TypeScript client for the HTTP API. It has no database access and no administration commands. An agent, a deploy job, and an operator tool each construct a `FadClient` with the base URL and the key you issued for that program.
+
+The package builds for ESM and CommonJS and requires Node.js 22 or later. From another project, pack it in this repository and install the tarball. `npm pack` prints the file name:
+
+```sh
+npm pack -w @fad/sdk
+npm install /path/to/fad-sdk-0.2.0.tgz
+```
+
+Create one client for the life of the process. Pass the key through a function so a rotated secret is picked up on the next call. Use `credentialProvider` when you prefer that name. When both are set, `apiKey` is the one that is called.
 
 ```ts
 import { FadClient } from '@fad/sdk';
 
 const fad = new FadClient({
-  baseUrl: 'http://127.0.0.1:8080',
-  apiKey: () => process.env.FAD_API_KEY ?? '',
-  allowInsecureHttp: true,
+  baseUrl: process.env.FAD_BASE_URL ?? '',
+  apiKey: () => {
+    const key = process.env.FAD_API_KEY;
+    if (!key) throw new Error('FAD_API_KEY is empty');
+    return key;
+  },
+  userAgentSuffix: 'accounts-payable-agent',
 });
-const current = await fad.organizations.current();
 ```
 
-Use `allowInsecureHttp` only for a loopback development URL.
+`baseUrl` is HTTPS. For a loopback development URL, set `allowInsecureHttp: true`. Any other `http` URL is rejected. The client refuses a base URL that contains a username or password, refuses redirects, and removes the API key from error text. The default timeout is 5 seconds. `timeoutMs` must be greater than 0 and at most 120000. Pass an `AbortSignal` on any call to cancel it.
 
-## Operate a production service
+### Check the directory and read the organization
 
-Put a TLS proxy in front of the API. Set `NODE_ENV` to `production`. Set `FAD_INGRESS_TLS` to `terminated`. Use a database URL with `sslmode=require`, `sslmode=verify-ca`, or `sslmode=verify-full`. Read `docs/operations/RUNBOOK.md` before you deploy the service.
+Health calls are unauthenticated. `health.ready()` resolves with `{ status: 'not_ready' }` on a 503 readiness response, so the caller can wait and try again. `organizations.current()` requires `organizations:read`.
+
+```ts
+const live = await fad.health.live();
+const ready = await fad.health.ready();
+const organization = await fad.organizations.current();
+
+console.log(live.status); // ok
+console.log(ready.status); // ready
+console.log(organization.data.id, organization.meta.request_id);
+```
+
+### Register an agent
+
+`agents.register` requires `agents:write`. `idempotencyKey` is required. Keep the body and the key stable for retries of that same registration. The directory retains the result for 24 hours. During that window, the same principal, key, and body return the original response, including the original revision. After the record expires, the same key is a new registration and creates another agent. Store `data.id` and call `agents.get` on later startups.
+
+```ts
+const registered = await fad.agents.register(
+  {
+    name: 'Accounts Payable Agent',
+    description: 'Matches supplier invoices',
+    owner_principal_id: process.env.FAD_OWNER_PRINCIPAL_ID ?? '',
+  },
+  { idempotencyKey: 'register-accounts-payable' },
+);
+
+console.log(registered.data.id);
+console.log(registered.data.global_id);
+console.log(registered.etag); // "agent-v1"
+console.log(registered.location); // /v1/agents/<id>
+```
+
+`owner_principal_id` is the service principal the administrator created. The current-organization response does not include it. Configure it beside the API key.
+
+### Read and list agents
+
+`get`, `list`, and `iterate` require `agents:read`. `get` returns the live row and its current ETag. Use that ETag for a later write. A missing agent and an agent in another organization both throw status 404 with code `AGENT_NOT_FOUND`.
+
+```ts
+const loaded = await fad.agents.get(registered.data.id);
+console.log(loaded.data.status, loaded.etag);
+
+const page = await fad.agents.list({ status: 'active', limit: 25 });
+for (const agent of page.data) {
+  console.log(agent.id, agent.global_id, agent.name);
+}
+console.log(page.meta.next_cursor);
+
+for await (const agent of fad.agents.iterate({ status: 'active' })) {
+  console.log(agent.id);
+}
+```
+
+`iterate` follows `next_cursor` until the last page. `list` without a status returns every status. `limit` defaults to 25 and cannot exceed 100.
+
+### Change an agent
+
+`agents.update` requires `agents:write`, an idempotency key, and `ifMatch` set to the ETag from `get` or from the previous write. Only fields you send are changed. `description: null` clears the description. A retired agent cannot be edited. A call that changes nothing keeps the current revision. Reuse the idempotency key only to retry that same body and the same ETag. A new edit uses a new key. The key and the ETag are both part of the stored request.
+
+```ts
+const updated = await fad.agents.update(
+  loaded.data.id,
+  { description: 'Matches supplier invoices and flags duplicates' },
+  { idempotencyKey: 'describe-accounts-payable-2026-10-20', ifMatch: loaded.etag },
+);
+
+console.log(updated.data.revision, updated.etag);
+```
+
+### Change directory status
+
+`suspend`, `activate`, and `retire` require `agents:lifecycle`. The body is `{ reason }`. A transition that is already in effect keeps the revision. Retire is terminal: the agent stays readable, and a later activate or edit returns status 409 with code `INVALID_STATE_TRANSITION`.
+
+```ts
+const suspended = await fad.agents.suspend(
+  updated.data.id,
+  { reason: 'Invoice source is offline' },
+  { idempotencyKey: 'suspend-accounts-payable-2026-10-20', ifMatch: updated.etag },
+);
+
+const activated = await fad.agents.activate(
+  suspended.data.id,
+  { reason: 'Invoice source is back' },
+  { idempotencyKey: 'activate-accounts-payable-2026-10-20', ifMatch: suspended.etag },
+);
+```
+
+`agents.retire` takes the same arguments.
+
+### When a call fails
+
+Failures throw `FadApiError` with `status`, `code`, `message`, and, when the server sent one, `requestId` and `retryAfterSeconds`.
+
+```ts
+import { FadApiError } from '@fad/sdk';
+
+try {
+  await fad.agents.update(loaded.data.id, { name: 'Accounts Payable' }, {
+    idempotencyKey: 'rename-accounts-payable-2026-10-20',
+    ifMatch: loaded.etag,
+  });
+} catch (err) {
+  if (err instanceof FadApiError && err.status === 412) {
+    const fresh = await fad.agents.get(loaded.data.id);
+    await fad.agents.update(fresh.data.id, { name: 'Accounts Payable' }, {
+      idempotencyKey: 'rename-accounts-payable-2026-10-20-r2',
+      ifMatch: fresh.etag,
+    });
+  }
+}
+```
+
+Status 412 means the ETag is stale. Read the agent again and send the edit with the new ETag and a new idempotency key. Status 428 means `If-Match` was missing. Status 409 with code `IDEMPOTENCY_CONFLICT` means that key was already used for a different body or a different ETag.
+
+The client retries a request at most twice (`maxGetRetries`, maximum 5) when the status is 429 or 503, or when the connection fails. It honors `Retry-After` up to `maxRetryAfterMs` (default 30 seconds) and up to the time left on the timeout. It retries a mutation only for those same failures, and the retry sends the same idempotency key and the same `If-Match`. It leaves 401, 403, 409, and 412 to the caller.
+
+| Method | Scope | Route |
+| --- | --- | --- |
+| `health.live()` | none | `GET /health/live` |
+| `health.ready()` | none | `GET /health/ready` |
+| `organizations.current()` | `organizations:read` | `GET /v1/organizations/current` |
+| `agents.register(body, { idempotencyKey })` | `agents:write` | `POST /v1/agents` |
+| `agents.get(agentId)` | `agents:read` | `GET /v1/agents/{agentId}` |
+| `agents.list(query)` | `agents:read` | `GET /v1/agents` |
+| `agents.iterate(query)` | `agents:read` | `GET /v1/agents`, following `next_cursor` |
+| `agents.update(agentId, body, { idempotencyKey, ifMatch })` | `agents:write` | `PATCH /v1/agents/{agentId}` |
+| `agents.suspend(agentId, { reason }, { idempotencyKey, ifMatch })` | `agents:lifecycle` | `POST /v1/agents/{agentId}/suspend` |
+| `agents.activate(agentId, { reason }, { idempotencyKey, ifMatch })` | `agents:lifecycle` | `POST /v1/agents/{agentId}/activate` |
+| `agents.retire(agentId, { reason }, { idempotencyKey, ifMatch })` | `agents:lifecycle` | `POST /v1/agents/{agentId}/retire` |
+
+## Use the client in an agent
+
+The directory does not start your agent. You start the agent, and the agent uses `@fad/sdk` to publish its directory record and to read the other agents in its organization.
+
+Ask the administrator for four values and put them in the secret store the agent already uses:
+
+- `FAD_BASE_URL`, the HTTPS URL of the API.
+- `FAD_API_KEY`, the key issued to this process.
+- `FAD_ORGANIZATION_ID`, the organization id you expect that key to return.
+- `FAD_OWNER_PRINCIPAL_ID`, the service principal that owns the agent. You need this only in the process that registers.
+
+Choose the key for the job that process does. A deploy job that registers the agent holds `organizations:read` and `agents:write`. The running agent holds `agents:read` and loads its record, or lists peers, with that key. An operator tool holds `agents:lifecycle`. When the agent process itself registers on startup, that process holds `agents:write`, and lifecycle stays on the operator tool. The agent never runs `fad-admin` and never opens PostgreSQL.
+
+On startup, wait until the directory is ready, confirm the organization, register once, and then read the live record. Persist `data.id`. On the next start, skip registration and call `agents.get` with the saved id. Registration is safe to retry with the same body and the same idempotency key for 24 hours. It is not a permanent get-or-create. After the idempotency record expires, repeating it creates a second agent.
+
+```ts
+import { FadClient } from '@fad/sdk';
+
+const fad = new FadClient({
+  baseUrl: process.env.FAD_BASE_URL ?? '',
+  apiKey: () => process.env.FAD_API_KEY ?? '',
+  userAgentSuffix: 'accounts-payable-agent',
+});
+
+export async function joinDirectory(signal: AbortSignal): Promise<{ id: string; globalId: string; etag: string }> {
+  const ready = await fad.health.ready({ signal });
+  if (ready.status !== 'ready') throw new Error('Directory is not ready');
+
+  const organization = await fad.organizations.current({ signal });
+  if (organization.data.id !== process.env.FAD_ORGANIZATION_ID) {
+    throw new Error('API key is for a different organization');
+  }
+  if (organization.data.status !== 'active') throw new Error('Organization is not active');
+
+  const savedId = process.env.FAD_AGENT_ID;
+  if (savedId) {
+    const current = await fad.agents.get(savedId, { signal });
+    return { id: current.data.id, globalId: current.data.global_id, etag: current.etag };
+  }
+
+  const registered = await fad.agents.register(
+    {
+      name: 'Accounts Payable Agent',
+      owner_principal_id: process.env.FAD_OWNER_PRINCIPAL_ID ?? '',
+    },
+    { idempotencyKey: 'register-accounts-payable', signal },
+  );
+  const current = await fad.agents.get(registered.data.id, { signal });
+  return { id: current.data.id, globalId: current.data.global_id, etag: current.etag };
+}
+```
+
+Save the returned `id` as `FAD_AGENT_ID` before the next start. Publish `globalId` where another system needs a stable name for this agent. Keep `etag` for the next update. When the agent's behavior changes, call `agents.update` with a new idempotency key and that ETag. Leave suspend, activate, and retire to the operator tool unless this process was issued `agents:lifecycle`.
+
+To see the other active agents in the same organization, walk the directory with the read key:
+
+```ts
+const peers: { id: string; globalId: string; name: string }[] = [];
+for await (const agent of fad.agents.iterate({ status: 'active' })) {
+  if (agent.id === process.env.FAD_AGENT_ID) continue;
+  peers.push({ id: agent.id, globalId: agent.global_id, name: agent.name });
+}
+```
+
+That list is the organization's directory. The client does not open a connection to those agents. Your agent uses `id`, `global_id`, `name`, `description`, and `status` to decide what to do next.
 
 ## License
 
