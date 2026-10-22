@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { hasScope, isUuid } from '@fad/auth-core';
 import { canonicalJson } from './agent-rules.js';
 import { insertAudit } from './audit.js';
+import { appendDirectoryEvent } from './event-outbox.js';
 import { IdempotencyConflictError, beginIdempotency, requestFingerprint, writeIdempotency } from './idempotency.js';
 import {
   POLICY_ACTIVE_CEILING,
@@ -417,6 +418,17 @@ async function transition(
     const policy = toPolicy(requiredRow(updated.rows[0]));
     await writeRevision(client, actor, policy, next === 'active' ? 'activated' : 'disabled');
     await insertAudit(client, audit(actor, next === 'active' ? 'policy.activated' : 'policy.disabled', policy));
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.policy.lifecycle_changed.v1',
+      subject: `policy/${policy.id}`,
+      aggregateType: 'policy',
+      aggregateId: policy.id,
+      aggregateRevision: policy.revision,
+      visibility: 'restricted',
+      payload: { policy_id: policy.id, revision: policy.revision, status: policy.status },
+      requestId: actor.requestId,
+    });
     return command(policy, 200);
   });
 }

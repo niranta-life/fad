@@ -27,6 +27,23 @@ function docker(args, env = {}) {
   });
 }
 
+function networkUrl(envName, user) {
+  const raw = process.env[envName];
+  if (!raw) return `postgres://${user}@fad-s0-pg:5432/fad`;
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return `postgres://${user}@fad-s0-pg:5432/fad`;
+  }
+  const name = parsed.username ? decodeURIComponent(parsed.username) : user;
+  const database = parsed.pathname.replace(/^\//, '') || 'fad';
+  const auth = parsed.password
+    ? `${encodeURIComponent(name)}:${encodeURIComponent(decodeURIComponent(parsed.password))}`
+    : encodeURIComponent(name);
+  return `postgres://${auth}@fad-s0-pg:5432/${database}`;
+}
+
 function call(base, method, path, key, body, headers = {}) {
   const requestHeaders = { ...headers };
   if (key) requestHeaders['x-fad-api-key'] = key;
@@ -75,8 +92,8 @@ test('slice 6 image replicas, old image admission, and database outage', { timeo
   };
   await docker(['unpause', 'fad-s0-pg']);
   await docker(['rm', '-f', ...NAMES]);
-  const dbUrl = 'postgres://fad_app@fad-s0-pg:5432/fad';
-  const migratorUrl = 'postgres://postgres@fad-s0-pg:5432/fad';
+  const dbUrl = networkUrl('DATABASE_URL', 'fad_app');
+  const migratorUrl = networkUrl('FAD_MIGRATOR_DATABASE_URL', 'postgres');
   const envFile = join(scratch, 'slice6-image.env');
   writeFileSync(envFile, [
     'NODE_ENV=development',

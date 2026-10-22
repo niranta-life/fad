@@ -1,0 +1,74 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [develop]
+
+jobs:
+  slice6:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: fad
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d fad"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgres://fad_app@127.0.0.1:5432/fad
+      FAD_MIGRATOR_DATABASE_URL: postgres://postgres@127.0.0.1:5432/fad
+      FAD_BOOTSTRAP_DATABASE_URL: postgres://postgres@127.0.0.1:5432/fad
+      FAD_APP_DB_PASSWORD: ci-app-password-not-production
+      FAD_API_KEY_PEPPER_V1: fad-ci-pepper-9c2e7a41b8d0465f-not-production
+    steps:
+      - name: Check out the pull request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Show the commit under test
+        run: |
+          set -eu
+          echo "HEAD=$(git rev-parse HEAD)"
+          echo "PR_HEAD=${{ github.event.pull_request.head.sha }}"
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha }}"
+
+      - name: Reject a fence skip
+        run: |
+          set -eu
+          grep -F 'A timeout is 503 in every mode' packages/db/src/enforcement.ts
+          if grep -R -n -E 'markSkip|s6_skip_pep' packages/db/src; then
+            echo 'fence skip is present'
+            exit 1
+          fi
+          grep -F 'admin.enforcement.getDecision' tests/slice6-clients.test.mjs
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Bootstrap roles and migrations
+        run: node apps/migrator/dist/main.js bootstrap
+
+      - name: Run database and client tests
+        run: >-
+          node --test --test-concurrency=1
+          tests/unit.test.mjs
+          tests/slice6-contract.test.mjs
+          tests/db.test.mjs
+          tests/agents.test.mjs
+          tests/sdk.test.mjs
+          tests/slice5.test.mjs
+          tests/slice6-clients.test.mjs

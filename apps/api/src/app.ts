@@ -3,10 +3,11 @@ import { randomUUID } from 'node:crypto';
 import Fastify, { LogController, type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { redactText } from '@fad/auth-core';
 import { contract, errorEnvelope, successEnvelope, type ErrorCode } from '@fad/contract';
-import { ENFORCEMENT_MIGRATION_VERSION, MCP_MIGRATION_VERSION, POLICY_MIGRATION_VERSION, SLICE3_MIGRATION_VERSION, TAG_MIGRATION_VERSION, cleanupRateLimits, consumeRateLimit, isDependencyError, rateLimitBucket, readMigrationFiles } from '@fad/db';
+import { ENFORCEMENT_MIGRATION_VERSION, MCP_MIGRATION_VERSION, POLICY_MIGRATION_VERSION, SLICE3_MIGRATION_VERSION, TAG_MIGRATION_VERSION, cleanupRateLimits, consumeRateLimit, eventCaptureBlocksReady, isDependencyError, rateLimitBucket, readMigrationFiles } from '@fad/db';
 import type { Pool } from 'pg';
 import { registerAgentRoutes } from './agent-routes.js';
 import { registerEnforcementRoutes } from './enforcement-routes.js';
+import { registerEventRoutes } from './event-routes.js';
 import { JsonLimitError, assertJsonLimits } from './json-limits.js';
 import { registerMcpRoutes } from './mcp-routes.js';
 import { registerPolicyRoutes } from './policy-routes.js';
@@ -24,8 +25,10 @@ const AGENT_ENDPOINT_PATH = /^\/v1\/agents\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f
 const AGENT_BINDING_PATH = /^\/v1\/agents\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/capabilities(?:\/[^/]+)?$/i;
 const POLICY_PATH = /^\/v1\/policies(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?:\/(?:activate|disable))?)?$/i;
 const ENFORCEMENT_DECISION_PATH = /^\/v1\/enforcement\/decisions\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const EVENT_ID_PATH = /^\/v1\/events\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const EVENT_SUBSCRIPTION_PATH = /^\/v1\/event-subscriptions(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?:\/(?:rotate-secret|replays(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})?|deliveries))?)?$/i;
 
-function knownPath(path: string, tagsEnabled: boolean, slice3Enabled: boolean, mcpEnabled: boolean, policiesEnabled: boolean, enforcementEnabled: boolean): boolean {
+function knownPath(path: string, tagsEnabled: boolean, slice3Enabled: boolean, mcpEnabled: boolean, policiesEnabled: boolean, enforcementEnabled: boolean, eventsEnabled: boolean): boolean {
   if (PATHS.has(path) || AGENT_PATH.test(path)) return true;
   if (mcpEnabled && (path === '/mcp' || path === '/.well-known/oauth-protected-resource/mcp')) return true;
   if (tagsEnabled && (path === '/v1/tag-definitions' || path === '/v1/agents/search' || TAG_DEFINITION_PATH.test(path) || AGENT_TAGS_PATH.test(path))) {
@@ -33,6 +36,7 @@ function knownPath(path: string, tagsEnabled: boolean, slice3Enabled: boolean, m
   }
   if (policiesEnabled && (path === '/v1/policies' || path === '/v1/authorization/evaluate' || POLICY_PATH.test(path))) return true;
   if (enforcementEnabled && (path === '/v1/enforcement/config' || path === '/v1/enforcement/preflight' || ENFORCEMENT_DECISION_PATH.test(path))) return true;
+  if (eventsEnabled && (path === '/v1/events' || EVENT_ID_PATH.test(path) || EVENT_SUBSCRIPTION_PATH.test(path))) return true;
   if (!slice3Enabled) return false;
   if (path === '/v1/capabilities' || path === '/v1/discovery/agents') return true;
   return CAPABILITY_VERSION_PATH.test(path) || AGENT_ENDPOINT_PATH.test(path) || AGENT_BINDING_PATH.test(path);
@@ -199,6 +203,18 @@ export async function buildApp(options: {
       sendError(reply, String(request.id), 405, 'METHOD_NOT_ALLOWED');
       return reply;
     }
+    if (config.eventsEnabled && path === '/v1/events' && request.method !== 'GET') {
+      sendError(reply, String(request.id), 405, 'METHOD_NOT_ALLOWED');
+      return reply;
+    }
+    if (config.eventsEnabled && EVENT_ID_PATH.test(path) && request.method !== 'GET') {
+      sendError(reply, String(request.id), 405, 'METHOD_NOT_ALLOWED');
+      return reply;
+    }
+    if (config.eventsEnabled && path === '/v1/event-subscriptions' && request.method !== 'GET' && request.method !== 'POST') {
+      sendError(reply, String(request.id), 405, 'METHOD_NOT_ALLOWED');
+      return reply;
+    }
     return undefined;
   });
 
@@ -289,7 +305,7 @@ export async function buildApp(options: {
   app.setNotFoundHandler((request, reply) => {
     const path = request.url.split('?')[0] ?? '';
     const requestId = String(request.id);
-    if (knownPath(path, config.tagsEnabled, config.slice3Enabled, config.mcp.enabled, config.policiesEnabled, config.enforcementEnabled)) {
+    if (knownPath(path, config.tagsEnabled, config.slice3Enabled, config.mcp.enabled, config.policiesEnabled, config.enforcementEnabled, config.eventsEnabled)) {
       return sendError(reply, requestId, 405, 'METHOD_NOT_ALLOWED');
     }
     return sendError(reply, requestId, 404, 'NOT_FOUND');
@@ -352,6 +368,9 @@ export async function buildApp(options: {
         if ((enforcementSchema.rowCount ?? 0) !== 1) {
           return send(reply, requestId, 503, { status: 'not_ready' }, 'HealthUnavailable', 'no-store');
         }
+      }
+      if (await eventCaptureBlocksReady(pool)) {
+        return send(reply, requestId, 503, { status: 'not_ready' }, 'HealthUnavailable', 'no-store');
       }
       await pool.query('SELECT 1');
       return send(reply, requestId, 200, { status: 'ready' }, 'Readiness', 'no-store');
@@ -435,6 +454,17 @@ export async function buildApp(options: {
 
   if (config.enforcementEnabled) {
     registerEnforcementRoutes(app, {
+      pool,
+      config,
+      send,
+      sendError,
+      limitRequest,
+      migrationsMatch,
+    });
+  }
+
+  if (config.eventsEnabled) {
+    registerEventRoutes(app, {
       pool,
       config,
       send,

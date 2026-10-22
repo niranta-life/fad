@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { hasScope } from '@fad/auth-core';
 import { insertAudit } from './audit.js';
+import { appendDirectoryEvent } from './event-outbox.js';
 import { canonicalJson, type AgentStatus } from './agent-rules.js';
 import { beginIdempotency, requestFingerprint, writeIdempotency, IdempotencyConflictError } from './idempotency.js';
 import {
@@ -385,6 +386,17 @@ export async function createTagDefinition(
           request_id: actor.requestId,
         },
       });
+      await appendDirectoryEvent(client, {
+        organizationId: actor.organizationId,
+        eventType: 'com.fad.tag.definition_created.v1',
+        subject: `tag/${definition.namespace}/${definition.key}`,
+        aggregateType: 'tag_definition',
+        aggregateId: null,
+        aggregateRevision: null,
+        visibility: definition.governed || definition.visibility === 'restricted' ? 'restricted' : 'standard',
+        payload: { namespace: definition.namespace, key: definition.key, change: 'upserted' },
+        requestId: actor.requestId,
+      });
       const result: TagWriteResult = {
         status: 201,
         definition,
@@ -610,6 +622,17 @@ export async function putAgentTag(
       if (!row) throw new Error('tag update returned no row');
       const assignment = toAssignment(row);
       await writeAssignmentHistory(client, actor, assignment, 'updated', existing.value, value, existing.revision, reason);
+      await appendDirectoryEvent(client, {
+        organizationId: actor.organizationId,
+        eventType: 'com.fad.tag.assignment_changed.v1',
+        subject: `agent/${agentId}/tag/${namespace}/${key}`,
+        aggregateType: 'tag_assignment',
+        aggregateId: agentId,
+        aggregateRevision: assignment.revision,
+        visibility: definition.governed || definition.visibility === 'restricted' ? 'restricted' : 'standard',
+        payload: { agent_id: agentId, namespace, key, revision: assignment.revision, change: 'assigned' },
+        requestId: actor.requestId,
+      });
       const result: TagWriteResult = { status: 200, assignment, etag: tagEtag(assignment.revision) };
       await store(client, actor, 'PUT', path, idempotencyKey, input, headers, result);
       return result;
@@ -649,6 +672,17 @@ export async function putAgentTag(
       assignment = toAssignment({ ...row, governed: definition.governed, visibility: definition.visibility });
     }
     await writeAssignmentHistory(client, actor, assignment, 'assigned', null, value, previousRevision, reason);
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.tag.assignment_changed.v1',
+      subject: `agent/${agentId}/tag/${namespace}/${key}`,
+      aggregateType: 'tag_assignment',
+      aggregateId: agentId,
+      aggregateRevision: assignment.revision,
+      visibility: definition.governed || definition.visibility === 'restricted' ? 'restricted' : 'standard',
+      payload: { agent_id: agentId, namespace, key, revision: assignment.revision, change: 'assigned' },
+      requestId: actor.requestId,
+    });
     const result: TagWriteResult = {
       status: 201,
       assignment,
@@ -714,6 +748,17 @@ export async function deleteAgentTag(
       updated_at: asTime(row.updated_at),
     };
     await writeAssignmentHistory(client, actor, tombstone, 'deleted', existing.value, null, existing.revision, reason);
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.tag.assignment_changed.v1',
+      subject: `agent/${agentId}/tag/${namespace}/${key}`,
+      aggregateType: 'tag_assignment',
+      aggregateId: agentId,
+      aggregateRevision: tombstone.revision,
+      visibility: definition.governed || definition.visibility === 'restricted' ? 'restricted' : 'standard',
+      payload: { agent_id: agentId, namespace, key, revision: tombstone.revision, change: 'removed' },
+      requestId: actor.requestId,
+    });
     const result: TagWriteResult = { status: 204 };
     await store(client, actor, 'DELETE', path, idempotencyKey, null, headers, result);
     return result;

@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { hasScope, isUuid } from '@fad/auth-core';
 import type { ErrorCode } from '@fad/contract';
 import { insertAudit } from './audit.js';
+import { appendDirectoryEvent } from './event-outbox.js';
 import { canonicalJson, codePointLength } from './agent-rules.js';
 import { beginIdempotency, requestFingerprint, writeIdempotency } from './idempotency.js';
 import {
@@ -984,6 +985,17 @@ export async function setEnforcementConfig(
         preflight_id: preflightId,
         request_id: caller.requestId,
       },
+    });
+    await appendDirectoryEvent(client, {
+      organizationId: caller.organizationId,
+      eventType: 'com.fad.enforcement.config_changed.v1',
+      subject: `enforcement/${caller.organizationId}`,
+      aggregateType: 'enforcement_config',
+      aggregateId: null,
+      aggregateRevision: config.revision,
+      visibility: 'restricted',
+      payload: { mode: config.mode, revision: config.revision },
+      requestId: caller.requestId,
     });
     const etag = enforcementEtag(config.revision);
     await writeIdempotency(client, {

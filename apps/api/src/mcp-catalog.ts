@@ -25,6 +25,16 @@ export const APPROVED_MCP_TOOLS = [
   'fad_preflight_enforcement',
   'fad_set_enforcement_config',
   'fad_get_enforcement_decision',
+  'fad_list_events',
+  'fad_get_event',
+  'fad_create_event_subscription',
+  'fad_list_event_subscriptions',
+  'fad_get_event_subscription',
+  'fad_update_event_subscription',
+  'fad_rotate_event_subscription_secret',
+  'fad_replay_events',
+  'fad_get_event_replay',
+  'fad_list_event_deliveries',
 ] as const;
 
 export type ApprovedMcpTool = (typeof APPROVED_MCP_TOOLS)[number];

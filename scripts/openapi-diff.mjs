@@ -55,6 +55,18 @@ const ENFORCEMENT_OPERATIONS = [
   ['post', '/v1/enforcement/preflight'],
   ['get', '/v1/enforcement/decisions/{decisionId}'],
 ];
+const EVENT_OPERATIONS = [
+  ['get', '/v1/events'],
+  ['get', '/v1/events/{eventId}'],
+  ['post', '/v1/event-subscriptions'],
+  ['get', '/v1/event-subscriptions'],
+  ['get', '/v1/event-subscriptions/{subscriptionId}'],
+  ['patch', '/v1/event-subscriptions/{subscriptionId}'],
+  ['post', '/v1/event-subscriptions/{subscriptionId}/rotate-secret'],
+  ['post', '/v1/event-subscriptions/{subscriptionId}/replays'],
+  ['get', '/v1/event-subscriptions/{subscriptionId}/replays/{replayId}'],
+  ['get', '/v1/event-subscriptions/{subscriptionId}/deliveries'],
+];
 const TAG_OPERATIONS = [
   ['post', '/v1/tag-definitions'],
   ['get', '/v1/tag-definitions'],
@@ -184,9 +196,10 @@ const expectedSlice3 = SLICE3_OPERATIONS.map(([method, path]) => `${method} ${pa
 const expectedSlice4 = [...expectedSlice3, ...MCP_OPERATIONS.map(([method, path]) => `${method} ${path}`)].sort();
 const expectedSlice5 = [...expectedSlice4, ...POLICY_OPERATIONS.map(([method, path]) => `${method} ${path}`)].sort();
 const expectedSlice6 = [...expectedSlice5, ...ENFORCEMENT_OPERATIONS.map(([method, path]) => `${method} ${path}`)].sort();
+const expectedSlice7 = [...expectedSlice6, ...EVENT_OPERATIONS.map(([method, path]) => `${method} ${path}`)].sort();
 const parentNewSorted = [...parentNew].sort();
-if (!same(parentNewSorted, expectedSlice6)) {
-  breaking.push(`parent new operations are not exactly the slice 3, MCP, policy, and enforcement routes: ${parentNew.join(', ')}`);
+if (!same(parentNewSorted, expectedSlice7)) {
+  breaking.push(`parent new operations are not exactly the slice 3, MCP, policy, enforcement, and event routes: ${parentNew.join(', ')}`);
 }
 const slice3Present = [];
 for (const [method, path] of SLICE3_OPERATIONS) {
@@ -225,6 +238,7 @@ const report = {
   parent_new_operations: parentNewSorted,
   parent_new_operations_are_only_tag_routes: same(parentNewSorted, expectedNew),
   parent_new_operations_are_only_slice3_routes: same(parentNewSorted, expectedSlice3),
+  parent_new_operations_are_slice7_routes: same(parentNewSorted, expectedSlice7),
   document_changes: documentChanges,
   preserved_operations: preserved,
   slice1_operations: slice1Present,

@@ -11,6 +11,9 @@ export function withTenant<T>(pool: Pool, organizationId: string, fn: (client: P
     if (process.env.FAD_ENFORCEMENT_CODE_ENABLED === 'true') {
       await client.query(`SELECT set_config('fad.pep_generation', '6', true)`);
     }
+    if (process.env.FAD_EVENTS_ENABLED === 'true') {
+      await client.query(`SELECT set_config('fad.events_generation', '7', true)`);
+    }
   });
 }
 

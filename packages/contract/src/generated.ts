@@ -501,3 +501,135 @@ export interface EnforcementDecisionResponse {
   meta: ResponseMeta;
 }
 
+export type DirectoryEventType = "com.fad.agent.registered.v1" | "com.fad.agent.updated.v1" | "com.fad.agent.lifecycle_changed.v1" | "com.fad.tag.definition_created.v1" | "com.fad.tag.assignment_changed.v1" | "com.fad.capability.published.v1" | "com.fad.agent.endpoint_changed.v1" | "com.fad.agent.capability_binding_changed.v1" | "com.fad.policy.lifecycle_changed.v1" | "com.fad.enforcement.config_changed.v1";
+
+export interface CloudEventData {
+  agent_id?: string;
+  revision?: number;
+  status?: string;
+  namespace?: string;
+  key?: string;
+  change?: "assigned" | "removed" | "upserted" | "deleted";
+  capability_id?: string;
+  version?: string;
+  endpoint_key?: string;
+  policy_id?: string;
+  mode?: "off" | "shadow" | "enforce";
+}
+
+export interface CloudEvent {
+  specversion: "1.0";
+  id: string;
+  source: string;
+  type: DirectoryEventType;
+  subject: string;
+  time: string;
+  datacontenttype: "application/json";
+  data: CloudEventData;
+  fadsequence?: number;
+}
+
+export interface EventPageMeta {
+  request_id: string;
+  api_version: "v1";
+  limit: number;
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
+export interface EventListResponse {
+  data: CloudEvent[];
+  meta: EventPageMeta;
+}
+
+export interface EventResponse {
+  data: CloudEvent;
+  meta: ResponseMeta;
+}
+
+export interface EventSubscription {
+  id: string;
+  callback_url: string;
+  description: string;
+  event_types: DirectoryEventType[];
+  status: "pending_verification" | "active" | "paused" | "disabled";
+  revision: number;
+  verified_at: string | null;
+  start_after_sequence: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EventSubscriptionCreate {
+  callback_url: string;
+  description?: string;
+  event_types: DirectoryEventType[];
+}
+
+export interface EventSubscriptionPatch {
+  status: "active" | "paused" | "disabled";
+}
+
+export interface EventSubscriptionSecret {
+  subscription: EventSubscription;
+  signing_secret: string;
+  signing_key_id: string;
+  overlap_expires_at?: string;
+}
+
+export interface EventSubscriptionCreateResponse {
+  data: EventSubscriptionSecret;
+  meta: ResponseMeta;
+}
+
+export interface EventSubscriptionRotateResponse {
+  data: EventSubscriptionSecret;
+  meta: ResponseMeta;
+}
+
+export interface EventSubscriptionResponse {
+  data: EventSubscription;
+  meta: ResponseMeta;
+}
+
+export interface EventSubscriptionListResponse {
+  data: EventSubscription[];
+  meta: EventPageMeta;
+}
+
+export interface EventReplay {
+  id: string;
+  subscription_id: string;
+  after_sequence: number;
+  through_sequence: number;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface EventReplayCreate {
+  after_sequence: number;
+  through_sequence: number;
+  reason: string;
+}
+
+export interface EventReplayResponse {
+  data: EventReplay;
+  meta: ResponseMeta;
+}
+
+export interface EventDelivery {
+  id: string;
+  event_id: string;
+  subscription_id: string;
+  status: "pending" | "leased" | "succeeded" | "dead" | "cancelled";
+  attempt_count: number;
+  last_attempt_at: string | null;
+  last_http_status: number | null;
+}
+
+export interface EventDeliveryListResponse {
+  data: EventDelivery[];
+  meta: EventPageMeta;
+}
+

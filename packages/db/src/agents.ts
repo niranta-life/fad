@@ -28,6 +28,7 @@ import {
   loadEvalContext,
   type EnforcementCaller,
 } from './enforcement.js';
+import { appendDirectoryEvent } from './event-outbox.js';
 import { withTenant } from './tenant.js';
 
 const RETENTION_MS = 24 * 60 * 60 * 1000;
@@ -279,6 +280,17 @@ export async function registerAgent(pool: Pool, actor: Actor, idempotencyKey: st
     if (!row) throw new Error('agent insert returned no row');
     const agent = toAgent(row);
     await writeHistory(client, actor, agent, 'registered', null, null, null);
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.agent.registered.v1',
+      subject: `agent/${agent.id}`,
+      aggregateType: 'agent',
+      aggregateId: agent.id,
+      aggregateRevision: agent.revision,
+      visibility: 'standard',
+      payload: { agent_id: agent.id, revision: agent.revision, status: agent.status },
+      requestId: actor.requestId,
+    });
     const result = commandResult(agent, 201);
     await storeResult(client, actor, 'POST', '/v1/agents', idem, input, result);
     return result;
@@ -462,6 +474,17 @@ export async function updateAgent(
     if (!row) throw new AgentServiceError(412, 'PRECONDITION_FAILED');
     const agent = toAgent(row);
     await writeHistory(client, actor, agent, 'updated', current.status, null, current.revision);
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.agent.updated.v1',
+      subject: `agent/${agent.id}`,
+      aggregateType: 'agent',
+      aggregateId: agent.id,
+      aggregateRevision: agent.revision,
+      visibility: 'standard',
+      payload: { agent_id: agent.id, revision: agent.revision, status: agent.status },
+      requestId: actor.requestId,
+    });
     const result = commandResult(agent, 200);
     await storeResult(client, actor, 'PATCH', resourcePath, idem, patch, result);
     return result;
@@ -535,6 +558,17 @@ export async function transitionAgent(
     if (!row) throw new AgentServiceError(412, 'PRECONDITION_FAILED');
     const agent = toAgent(row);
     await writeHistory(client, actor, agent, operation, current.status, reason, current.revision);
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.agent.lifecycle_changed.v1',
+      subject: `agent/${agent.id}`,
+      aggregateType: 'agent',
+      aggregateId: agent.id,
+      aggregateRevision: agent.revision,
+      visibility: 'standard',
+      payload: { agent_id: agent.id, revision: agent.revision, status: agent.status },
+      requestId: actor.requestId,
+    });
     const result = commandResult(agent, 200);
     await storeResult(client, actor, 'POST', resourcePath, idem, { reason, action }, result);
     return result;

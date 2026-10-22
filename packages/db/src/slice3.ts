@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { hasScope } from '@fad/auth-core';
 import { insertAudit } from './audit.js';
+import { appendDirectoryEvent } from './event-outbox.js';
 import { canonicalJson } from './agent-rules.js';
 import { beginIdempotency, requestFingerprint, writeIdempotency } from './idempotency.js';
 import { validateTagValue, type TagType } from './tag-rules.js';
@@ -501,6 +502,17 @@ export async function publishCapability(
         request_id: actor.requestId,
       },
     });
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.capability.published.v1',
+      subject: `capability/${capability.id}@${capability.version}`,
+      aggregateType: 'capability_version',
+      aggregateId: null,
+      aggregateRevision: null,
+      visibility: 'standard',
+      payload: { capability_id: capability.id, version: capability.version },
+      requestId: actor.requestId,
+    });
     const result: WriteResult = {
       status: 201,
       capability,
@@ -695,6 +707,17 @@ export async function putEndpoint(
         requestId: actor.requestId,
         details: { endpoint_key: key, revision: endpoint.revision, protocol: endpoint.protocol, auth_scheme: endpoint.auth_scheme, enabled: endpoint.enabled, verification: 'self_declared', request_id: actor.requestId },
       });
+      await appendDirectoryEvent(client, {
+        organizationId: actor.organizationId,
+        eventType: 'com.fad.agent.endpoint_changed.v1',
+        subject: `agent/${agentId}/endpoint/${key}`,
+        aggregateType: 'agent_endpoint',
+        aggregateId: agentId,
+        aggregateRevision: endpoint.revision,
+        visibility: 'standard',
+        payload: { agent_id: agentId, endpoint_key: key, revision: endpoint.revision, change: 'upserted' },
+        requestId: actor.requestId,
+      });
       const result: WriteResult = { status: 200, endpoint, etag: endpointEtag(endpoint.revision) };
       await store(client, actor, 'PUT', path, idempotencyKey, input, headers, result);
       return result;
@@ -746,6 +769,17 @@ export async function putEndpoint(
       outcome: 'success',
       requestId: actor.requestId,
       details: { endpoint_key: key, revision: endpoint.revision, protocol: endpoint.protocol, auth_scheme: endpoint.auth_scheme, enabled: endpoint.enabled, verification: 'self_declared', request_id: actor.requestId },
+    });
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.agent.endpoint_changed.v1',
+      subject: `agent/${agentId}/endpoint/${key}`,
+      aggregateType: 'agent_endpoint',
+      aggregateId: agentId,
+      aggregateRevision: endpoint.revision,
+      visibility: 'standard',
+      payload: { agent_id: agentId, endpoint_key: key, revision: endpoint.revision, change: 'upserted' },
+      requestId: actor.requestId,
     });
     const result: WriteResult = { status: 201, endpoint, etag: endpointEtag(endpoint.revision), location: path };
     await store(client, actor, 'PUT', path, idempotencyKey, input, headers, result);
@@ -806,6 +840,17 @@ export async function deleteEndpoint(
       outcome: 'success',
       requestId: actor.requestId,
       details: { endpoint_key: key, revision: asRevision(row.revision), verification: 'self_declared', request_id: actor.requestId },
+    });
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.agent.endpoint_changed.v1',
+      subject: `agent/${agentId}/endpoint/${key}`,
+      aggregateType: 'agent_endpoint',
+      aggregateId: agentId,
+      aggregateRevision: asRevision(row.revision),
+      visibility: 'standard',
+      payload: { agent_id: agentId, endpoint_key: key, revision: asRevision(row.revision), change: 'deleted' },
+      requestId: actor.requestId,
     });
     const result: WriteResult = { status: 204 };
     await store(client, actor, 'DELETE', path, idempotencyKey, null, headers, result);
@@ -934,6 +979,17 @@ export async function putBinding(
         requestId: actor.requestId,
         details: { capability_id: capabilityId, version: binding.version, endpoint_key: binding.endpoint_key, revision: binding.revision, verification: 'self_declared', request_id: actor.requestId },
       });
+      await appendDirectoryEvent(client, {
+        organizationId: actor.organizationId,
+        eventType: 'com.fad.agent.capability_binding_changed.v1',
+        subject: `agent/${agentId}/capability/${capabilityId}`,
+        aggregateType: 'capability_binding',
+        aggregateId: agentId,
+        aggregateRevision: binding.revision,
+        visibility: 'standard',
+        payload: { agent_id: agentId, capability_id: capabilityId, version: binding.version, endpoint_key: binding.endpoint_key, revision: binding.revision, change: 'upserted' },
+        requestId: actor.requestId,
+      });
       const result: WriteResult = { status: 200, binding, etag: bindingEtag(binding.revision) };
       await store(client, actor, 'PUT', path, idempotencyKey, input, headers, result);
       return result;
@@ -985,6 +1041,17 @@ export async function putBinding(
       outcome: 'success',
       requestId: actor.requestId,
       details: { capability_id: capabilityId, version: binding.version, endpoint_key: binding.endpoint_key, revision: binding.revision, verification: 'self_declared', request_id: actor.requestId },
+    });
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.agent.capability_binding_changed.v1',
+      subject: `agent/${agentId}/capability/${capabilityId}`,
+      aggregateType: 'capability_binding',
+      aggregateId: agentId,
+      aggregateRevision: binding.revision,
+      visibility: 'standard',
+      payload: { agent_id: agentId, capability_id: capabilityId, version: binding.version, endpoint_key: binding.endpoint_key, revision: binding.revision, change: 'upserted' },
+      requestId: actor.requestId,
     });
     const result: WriteResult = { status: 201, binding, etag: bindingEtag(binding.revision), location: path };
     await store(client, actor, 'PUT', path, idempotencyKey, input, headers, result);
@@ -1043,6 +1110,17 @@ export async function deleteBinding(
       outcome: 'success',
       requestId: actor.requestId,
       details: { capability_id: capabilityId, revision: asRevision(row.revision), verification: 'self_declared', request_id: actor.requestId },
+    });
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.agent.capability_binding_changed.v1',
+      subject: `agent/${agentId}/capability/${capabilityId}`,
+      aggregateType: 'capability_binding',
+      aggregateId: agentId,
+      aggregateRevision: asRevision(row.revision),
+      visibility: 'standard',
+      payload: { agent_id: agentId, capability_id: capabilityId, revision: asRevision(row.revision), change: 'deleted' },
+      requestId: actor.requestId,
     });
     const result: WriteResult = { status: 204 };
     await store(client, actor, 'DELETE', path, idempotencyKey, null, headers, result);

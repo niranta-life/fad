@@ -1,0 +1,11 @@
+2026-10-22T20:20:23.303Z PASS MIG-CHECKSUM 91721c2a592c14de454c1a64eb1d4b725fd4dca5727410004691811d9001e17b
+2026-10-22T20:20:23.486Z PASS MIG-RLS fad_event_delivery_attempts,fad_event_delivery_jobs,fad_event_fanout_offsets,fad_event_replay_requests,fad_event_secret_receipts,fad_event_streams,fad_event_subscriptions,fad_outbox_events,fad_webhook_secrets
+2026-10-22T20:20:31.580Z PASS DRAIN sigterm_exit=0 status=succeeded lease_clear=true
+2026-10-22T20:20:32.404Z PASS LOAD samples=20 elapsed_ms=357 cpu=Apple M4 mem_bytes=17179869184
+2026-10-22T20:20:32.418Z PASS OLD-WRITER fad_app without fad.events_generation received 55000
+2026-10-22T20:20:35.047Z PASS RESTART events=37 jobs=12 restore_org=37
+2026-10-22T20:20:48Z IMAGE id=sha256:e19007ef47fa12ea601f475e0d5bc26f0e10e979b0197ea6b9cdf0184296dba2 user=node cmd=node apps/api/dist/server.js
+2026-10-22T20:20:48Z COMPOSE exit=0 api_image=fad-api:local worker_image=fad-api:local worker_command=node apps/api/dist/event-worker.js read_only=true cap_drop=ALL security_opt=no-new-privileges:true privileged=absent
+2026-10-22T20:20:48Z CHECKSUMS 007=91721c2a592c14de454c1a64eb1d4b725fd4dca5727410004691811d9001e17b guards=f81c463cf239a0cfc6f557c4f14b75c2209a064f2de98a9723aa30bf3cdd4d4f prune=2b115291e75364dfca221d6669f63eae793b63c9f46271e55f3c02fba828c3f6 read=1253bf992d4aaa428d695a530ff62735947a8d290e047b917a5535a1bde9253f scopes=a58e779a72d75067dd2a7a6539981c10eaee94a79f1ca82eb2db0296768e1396
+2026-10-22T20:20:48Z CAPTURE required=false
+2026-10-22T20:20:48Z NPM-TEST files=36 pass=36 fail=0 duration_ms=192833.115792

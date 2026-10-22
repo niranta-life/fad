@@ -1,0 +1,6 @@
+PASS VERSION 1.5.0
+PASS SLICE5_OPS 41
+PASS EVALUATE not_enforced
+PASS OPS 55
+PASS PATHS /v1/events,/v1/events/{eventId},/v1/event-subscriptions,/v1/event-subscriptions/{subscriptionId},/v1/event-subscriptions/{subscriptionId}/rotate-secret,/v1/event-subscriptions/{subscriptionId}/replays,/v1/event-subscriptions/{subscriptionId}/replays/{replayId},/v1/event-subscriptions/{subscriptionId}/deliveries
+PASS TOOLS fad_list_events,fad_get_event,fad_create_event_subscription,fad_list_event_subscriptions,fad_get_event_subscription,fad_update_event_subscription,fad_rotate_event_subscription_secret,fad_replay_events,fad_get_event_replay,fad_list_event_deliveries

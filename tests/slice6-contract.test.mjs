@@ -19,6 +19,25 @@ const addedTools = [
   'fad_get_enforcement_config', 'fad_preflight_enforcement',
   'fad_set_enforcement_config', 'fad_get_enforcement_decision',
 ];
+const eventTools = [
+  'fad_list_events', 'fad_get_event', 'fad_create_event_subscription',
+  'fad_list_event_subscriptions', 'fad_get_event_subscription', 'fad_update_event_subscription',
+  'fad_rotate_event_subscription_secret', 'fad_replay_events', 'fad_get_event_replay',
+  'fad_list_event_deliveries',
+];
+const extraExpected = [
+  '/v1/enforcement/config',
+  '/v1/enforcement/decisions/{decisionId}',
+  '/v1/enforcement/preflight',
+  '/v1/event-subscriptions',
+  '/v1/event-subscriptions/{subscriptionId}',
+  '/v1/event-subscriptions/{subscriptionId}/deliveries',
+  '/v1/event-subscriptions/{subscriptionId}/replays',
+  '/v1/event-subscriptions/{subscriptionId}/replays/{replayId}',
+  '/v1/event-subscriptions/{subscriptionId}/rotate-secret',
+  '/v1/events',
+  '/v1/events/{eventId}',
+];
 
 function same(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
@@ -34,7 +53,7 @@ test('slice 5 paths and the deployed MCP catalog stay unchanged except four enfo
   }
   const livePaths = Object.keys(openapi.paths);
   const extraPaths = livePaths.filter((path) => !frozen.paths.includes(path)).sort();
-  if (!same(extraPaths, ['/v1/enforcement/config', '/v1/enforcement/decisions/{decisionId}', '/v1/enforcement/preflight'])) {
+  if (!same(extraPaths, extraExpected)) {
     throw new Error(`unexpected paths ${extraPaths.join(',')}`);
   }
   const evaluate = openapi.paths?.['/v1/authorization/evaluate']?.post;
@@ -46,9 +65,9 @@ test('slice 5 paths and the deployed MCP catalog stay unchanged except four enfo
   for (const item of Object.values(openapi.paths)) {
     for (const method of methods) if (item?.[method]) liveOps += 1;
   }
-  if (liveOps !== 45) throw new Error(`operation count ${liveOps}`);
+  if (liveOps !== 55) throw new Error(`operation count ${liveOps}`);
   const tools = [...catalog.matchAll(/'(fad_[a-z0-9_]+)'/g)].map((match) => match[1]);
-  if (!same(tools, [...priorTools, ...addedTools])) throw new Error(`mcp catalog ${tools.join(',')}`);
+  if (!same(tools, [...priorTools, ...addedTools, ...eventTools])) throw new Error(`mcp catalog ${tools.join(',')}`);
   if (!same([...ENABLED_TOOL_NAMES], priorTools.slice(0, ENABLED_TOOL_NAMES.length))) {
     throw new Error('mcp client enabled tools changed');
   }

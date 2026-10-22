@@ -20,3 +20,4 @@ sdk-consumer/
 !docs/releases/slice-4/**/*.log
 !docs/releases/slice-5/**/*.log
 !docs/releases/slice-6/**/*.log
+!docs/releases/slice-7/**/*.log

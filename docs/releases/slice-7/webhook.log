@@ -1,0 +1,15 @@
+2026-10-22T20:20:27.258Z PASS SSRF ip=WEBHOOK_URL_REJECTED rebind=true proxy=true redirect=true
+2026-10-22T20:20:27.270Z PASS SSRF-V6 literal=WEBHOOK_URL_REJECTED ula=WEBHOOK_URL_REJECTED ipv6_rebind=true retry_rebind=true tls_mismatch=true pinned=127.0.0.1
+2026-10-22T20:20:27.515Z PASS VERIFY active watermark=5 pending_unchanged=pending_verification
+2026-10-22T20:20:27.617Z PASS HMAC event=41380473-be59-412a-a3c4-73d06206e390 delivery=96d64090-d503-4ba5-9928-c4e7c9c3eeda signed=true
+2026-10-22T20:20:27.617Z PASS HMAC-FORGED timestamp_shift=false older_than_5m=false malformed=false body=false
+2026-10-22T20:20:27.725Z PASS PAUSE stale=PRECONDITION_FAILED paused_posts=0
+2026-10-22T20:20:27.866Z PASS ROTATE missing_if_match=PRECONDITION_REQUIRED after_rotation=SECRET_RECEIPT_EXPIRED expired=SECRET_RECEIPT_EXPIRED subscriptions=3
+2026-10-22T20:20:28.074Z PASS DISABLED status=disabled revive=CONFLICT posts=0
+2026-10-22T20:20:28.415Z PASS RETRY 503 and 429 waits were shortened in SQL before the next attempt. 400 dead-lettered.
+2026-10-22T20:20:28.615Z PASS ATTEMPT-12 attempt_count was set to 11, then one 503 made the job dead
+2026-10-22T20:20:28.922Z PASS AGE-48H status=dead attempts=1
+2026-10-22T20:20:29.995Z PASS LOST-2XX same_event=true consumer_actions=1
+2026-10-22T20:20:31.387Z PASS WORKER-KILL sigkill_before_response status=succeeded outbox_delta=1
+2026-10-22T20:20:31.691Z PASS REPLAY id=77292055-ed3f-41eb-b44c-fc0063376994 event=300a9e48-42df-476a-8900-2bfcf12bc21f delivery=b63aee81-b8e0-4c1f-9c2a-41bc7c592bf2
+2026-10-22T20:20:32.037Z PASS ACL cancelled=scope_missing posts=0

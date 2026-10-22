@@ -1,3 +1,5 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
+
 export interface FadClientOptions {
   baseUrl: string;
   apiKey?: string | (() => Promise<string> | string);
@@ -709,6 +711,29 @@ export class FadClient {
       this.enforcementSetConfig(body, options),
     getDecision: (decisionId: string, options?: CallOptions): Promise<FadResponse<EnforcementDecision>> =>
       this.enforcementGetDecision(decisionId, options),
+  };
+
+  readonly events = {
+    list: (query: EventListQuery = {}): Promise<EventPage> => this.eventsList(query),
+    listAll: (query: EventListQuery = {}, maxPages = 100): AsyncGenerator<CloudEventV1> => this.iterateEvents(query, maxPages),
+    get: (eventId: string, options?: CallOptions): Promise<FadResponse<CloudEventV1>> => this.eventsGet(eventId, options),
+    subscribe: (input: EventSubscribeInput, options: IdempotentOptions): Promise<EventSubscriptionSecretResult> =>
+      this.eventsSubscribe(input, options),
+    subscriptions: {
+      list: (query: EventPageQuery = {}): Promise<EventSubscriptionPage> => this.subscriptionList(query),
+      get: (subscriptionId: string, options?: CallOptions): Promise<EventSubscriptionResult> =>
+        this.subscriptionGet(subscriptionId, options),
+      update: (subscriptionId: string, body: EventSubscriptionPatch, options: PreconditionOptions): Promise<EventSubscriptionResult> =>
+        this.subscriptionUpdate(subscriptionId, body, options),
+      rotateSecret: (subscriptionId: string, options: PreconditionOptions): Promise<EventSubscriptionSecretResult> =>
+        this.subscriptionRotate(subscriptionId, options),
+      replay: (subscriptionId: string, body: EventReplayInput, options: IdempotentOptions): Promise<FadResponse<EventReplay>> =>
+        this.subscriptionReplay(subscriptionId, body, options),
+      getReplay: (subscriptionId: string, replayId: string, options?: CallOptions): Promise<FadResponse<EventReplay>> =>
+        this.subscriptionGetReplay(subscriptionId, replayId, options),
+      deliveries: (subscriptionId: string, query: EventPageQuery = {}): Promise<EventDeliveryPage> =>
+        this.subscriptionDeliveries(subscriptionId, query),
+    },
   };
 
   private async healthCall<T extends { status: string }>(
@@ -1432,6 +1457,159 @@ export class FadClient {
     if (response.status === 200 && isEnforcementDecisionResponse(body)) return body;
     throw errorFrom(response, body, key);
   }
+
+  private async eventsList(query: EventListQuery): Promise<EventPage> {
+    const key = await this.resolveKey();
+    const response = await this.send(`/v1/events${pageQuery(query)}`, true, query.signal, key);
+    const body = await readJson(response, key);
+    if (response.status === 200 && isEventPage(body)) return body;
+    throw errorFrom(response, body, key);
+  }
+
+  private async *iterateEvents(query: EventListQuery, maxPages: number): AsyncGenerator<CloudEventV1> {
+    let cursor = query.cursor;
+    const seen = new Set<string>();
+    const pages = Number.isInteger(maxPages) && maxPages > 0 ? Math.min(maxPages, 1000) : 0;
+    for (let page = 0; page < pages; page += 1) {
+      const result = await this.eventsList({ ...query, cursor });
+      for (const item of result.data) yield item;
+      const next = result.meta.next_cursor;
+      if (!result.meta.has_more || next === null) return;
+      if (seen.has(next) || next === cursor) return;
+      seen.add(next);
+      cursor = next;
+    }
+  }
+
+  private async eventsGet(eventId: string, options?: CallOptions): Promise<FadResponse<CloudEventV1>> {
+    const key = await this.resolveKey();
+    const response = await this.send(`/v1/events/${encodeURIComponent(eventId)}`, true, options?.signal, key);
+    const body = await readJson(response, key);
+    if (response.status === 200 && isCloudEventResponse(body)) return body;
+    throw errorFrom(response, body, key);
+  }
+
+  private async eventsSubscribe(input: EventSubscribeInput, options: IdempotentOptions): Promise<EventSubscriptionSecretResult> {
+    requireKey(options.idempotencyKey);
+    const key = await this.resolveKey();
+    const payload: Record<string, unknown> = { callback_url: input.callbackUrl, event_types: input.eventTypes };
+    if (input.description !== undefined) payload.description = input.description;
+    const response = await this.sendJson('/v1/event-subscriptions', 'POST', payload, {
+      'Idempotency-Key': options.idempotencyKey,
+    }, options.signal, key, true);
+    const body = await readJson(response, key);
+    if ((response.status === 201 || response.status === 200) && isSubscriptionSecretResponse(body)) {
+      return withSubscriptionEtag(response, body);
+    }
+    throw errorFrom(response, body, key);
+  }
+
+  private async subscriptionList(query: EventPageQuery): Promise<EventSubscriptionPage> {
+    const key = await this.resolveKey();
+    const response = await this.send(`/v1/event-subscriptions${pageQuery(query)}`, true, query.signal, key);
+    const body = await readJson(response, key);
+    if (response.status === 200 && isSubscriptionPage(body)) return body;
+    throw errorFrom(response, body, key);
+  }
+
+  private async subscriptionGet(subscriptionId: string, options?: CallOptions): Promise<EventSubscriptionResult> {
+    const key = await this.resolveKey();
+    const response = await this.send(`/v1/event-subscriptions/${encodeURIComponent(subscriptionId)}`, true, options?.signal, key);
+    const body = await readJson(response, key);
+    if (response.status === 200 && isSubscriptionResponse(body)) return withSubscriptionEtag(response, body);
+    throw errorFrom(response, body, key);
+  }
+
+  private async subscriptionUpdate(
+    subscriptionId: string,
+    body: EventSubscriptionPatch,
+    options: PreconditionOptions,
+  ): Promise<EventSubscriptionResult> {
+    requireKey(options.idempotencyKey);
+    if (typeof options.ifMatch !== 'string' || options.ifMatch.length === 0) throw new Error('ifMatch is required');
+    const key = await this.resolveKey();
+    const response = await this.sendJson(
+      `/v1/event-subscriptions/${encodeURIComponent(subscriptionId)}`,
+      'PATCH',
+      { status: body.status },
+      { 'Idempotency-Key': options.idempotencyKey, 'If-Match': options.ifMatch },
+      options.signal,
+      key,
+      true,
+    );
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isSubscriptionResponse(parsed)) return withSubscriptionEtag(response, parsed);
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async subscriptionRotate(subscriptionId: string, options: PreconditionOptions): Promise<EventSubscriptionSecretResult> {
+    requireKey(options.idempotencyKey);
+    if (typeof options.ifMatch !== 'string' || options.ifMatch.length === 0) throw new Error('ifMatch is required');
+    const key = await this.resolveKey();
+    const response = await this.sendJson(
+      `/v1/event-subscriptions/${encodeURIComponent(subscriptionId)}/rotate-secret`,
+      'POST',
+      undefined,
+      { 'Idempotency-Key': options.idempotencyKey, 'If-Match': options.ifMatch },
+      options.signal,
+      key,
+      true,
+    );
+    const body = await readJson(response, key);
+    if (response.status === 200 && isSubscriptionSecretResponse(body)) return withSubscriptionEtag(response, body);
+    throw errorFrom(response, body, key);
+  }
+
+  private async subscriptionReplay(
+    subscriptionId: string,
+    body: EventReplayInput,
+    options: IdempotentOptions,
+  ): Promise<FadResponse<EventReplay>> {
+    requireKey(options.idempotencyKey);
+    const key = await this.resolveKey();
+    const response = await this.sendJson(
+      `/v1/event-subscriptions/${encodeURIComponent(subscriptionId)}/replays`,
+      'POST',
+      { after_sequence: body.afterSequence, through_sequence: body.throughSequence, reason: body.reason },
+      { 'Idempotency-Key': options.idempotencyKey },
+      options.signal,
+      key,
+      true,
+    );
+    const parsed = await readJson(response, key);
+    if ((response.status === 201 || response.status === 200) && isReplayResponse(parsed)) return parsed;
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async subscriptionGetReplay(
+    subscriptionId: string,
+    replayId: string,
+    options?: CallOptions,
+  ): Promise<FadResponse<EventReplay>> {
+    const key = await this.resolveKey();
+    const response = await this.send(
+      `/v1/event-subscriptions/${encodeURIComponent(subscriptionId)}/replays/${encodeURIComponent(replayId)}`,
+      true,
+      options?.signal,
+      key,
+    );
+    const body = await readJson(response, key);
+    if (response.status === 200 && isReplayResponse(body)) return body;
+    throw errorFrom(response, body, key);
+  }
+
+  private async subscriptionDeliveries(subscriptionId: string, query: EventPageQuery): Promise<EventDeliveryPage> {
+    const key = await this.resolveKey();
+    const response = await this.send(
+      `/v1/event-subscriptions/${encodeURIComponent(subscriptionId)}/deliveries${pageQuery(query)}`,
+      true,
+      query.signal,
+      key,
+    );
+    const body = await readJson(response, key);
+    if (response.status === 200 && isDeliveryPage(body)) return body;
+    throw errorFrom(response, body, key);
+  }
 }
 
 function conditionalHeaders(options: ConditionalWriteOptions): Record<string, string> {
@@ -1795,4 +1973,240 @@ function isEnforcementDecisionResponse(value: unknown): value is FadResponse<Enf
     && typeof data.reason_code === 'string'
     && (data.policy_decision_id === null || typeof data.policy_decision_id === 'string')
     && typeof data.happened_at === 'string';
+}
+
+function pageQuery(query: { type?: string; limit?: number; cursor?: string }): string {
+  const params = new URLSearchParams();
+  if (query.type) params.set('type', query.type);
+  if (query.limit !== undefined) params.set('limit', String(query.limit));
+  if (query.cursor) params.set('cursor', query.cursor);
+  const text = params.toString();
+  return text.length > 0 ? `?${text}` : '';
+}
+
+function isCloudEvent(value: unknown): value is CloudEventV1 {
+  if (!isRecord(value) || !isRecord(value.data)) return false;
+  return value.specversion === '1.0'
+    && typeof value.id === 'string'
+    && typeof value.source === 'string'
+    && typeof value.type === 'string'
+    && typeof value.subject === 'string'
+    && typeof value.time === 'string'
+    && value.datacontenttype === 'application/json'
+    && (value.fadsequence === undefined || typeof value.fadsequence === 'number');
+}
+
+function isEventPageMeta(value: unknown): value is EventPage['meta'] {
+  if (!isPageMeta(value)) return false;
+  return typeof (value as { has_more?: unknown }).has_more === 'boolean';
+}
+
+function isEventPage(value: unknown): value is EventPage {
+  return isRecord(value) && Array.isArray(value.data) && value.data.every(isCloudEvent) && isEventPageMeta(value.meta);
+}
+
+function isCloudEventResponse(value: unknown): value is FadResponse<CloudEventV1> {
+  return isRecord(value) && isCloudEvent(value.data) && isMeta(value.meta);
+}
+
+function isEventSubscription(value: unknown): value is EventSubscription {
+  if (!isRecord(value) || !Array.isArray(value.event_types)) return false;
+  return typeof value.id === 'string'
+    && typeof value.callback_url === 'string'
+    && typeof value.description === 'string'
+    && value.event_types.every((item) => typeof item === 'string')
+    && typeof value.status === 'string'
+    && typeof value.revision === 'number'
+    && (typeof value.verified_at === 'string' || value.verified_at === null)
+    && (typeof value.start_after_sequence === 'number' || value.start_after_sequence === null)
+    && typeof value.created_at === 'string'
+    && typeof value.updated_at === 'string';
+}
+
+function isSubscriptionResponse(value: unknown): value is FadResponse<EventSubscription> {
+  return isRecord(value) && isEventSubscription(value.data) && isMeta(value.meta);
+}
+
+function isSubscriptionPage(value: unknown): value is EventSubscriptionPage {
+  return isRecord(value) && Array.isArray(value.data) && value.data.every(isEventSubscription) && isEventPageMeta(value.meta);
+}
+
+function isSubscriptionSecret(value: unknown): value is EventSubscriptionSecret {
+  if (!isRecord(value) || !isEventSubscription(value.subscription)) return false;
+  return typeof value.signing_secret === 'string'
+    && typeof value.signing_key_id === 'string'
+    && (value.overlap_expires_at === undefined || typeof value.overlap_expires_at === 'string');
+}
+
+function isSubscriptionSecretResponse(value: unknown): value is FadResponse<EventSubscriptionSecret> {
+  return isRecord(value) && isSubscriptionSecret(value.data) && isMeta(value.meta);
+}
+
+function withSubscriptionEtag<T>(response: Response, body: FadResponse<T>): FadResponse<T> & { etag: string } {
+  const etag = response.headers.get('etag') ?? '';
+  if (!/^"subscription-v[1-9][0-9]*"$/.test(etag)) {
+    throw new FadApiError(response.status, 'INVALID_RESPONSE', 'Response did not include a strong ETag', headerRequestId(response));
+  }
+  return { ...body, etag };
+}
+
+function isReplay(value: unknown): value is EventReplay {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string'
+    && typeof value.subscription_id === 'string'
+    && typeof value.after_sequence === 'number'
+    && typeof value.through_sequence === 'number'
+    && typeof value.status === 'string'
+    && typeof value.created_at === 'string'
+    && (typeof value.completed_at === 'string' || value.completed_at === null);
+}
+
+function isReplayResponse(value: unknown): value is FadResponse<EventReplay> {
+  return isRecord(value) && isReplay(value.data) && isMeta(value.meta);
+}
+
+function isDelivery(value: unknown): value is EventDelivery {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string'
+    && typeof value.event_id === 'string'
+    && typeof value.subscription_id === 'string'
+    && typeof value.status === 'string'
+    && typeof value.attempt_count === 'number'
+    && (typeof value.last_attempt_at === 'string' || value.last_attempt_at === null)
+    && (typeof value.last_http_status === 'number' || value.last_http_status === null);
+}
+
+function isDeliveryPage(value: unknown): value is EventDeliveryPage {
+  return isRecord(value) && Array.isArray(value.data) && value.data.every(isDelivery) && isEventPageMeta(value.meta);
+}
+
+export interface CloudEventV1 {
+  specversion: '1.0';
+  id: string;
+  source: string;
+  type: string;
+  subject: string;
+  time: string;
+  datacontenttype: 'application/json';
+  data: Record<string, unknown>;
+  fadsequence?: number;
+}
+
+export interface EventListQuery {
+  type?: string;
+  limit?: number;
+  cursor?: string;
+  signal?: AbortSignal;
+}
+
+export interface EventPageQuery {
+  limit?: number;
+  cursor?: string;
+  signal?: AbortSignal;
+}
+
+export interface EventPage {
+  data: CloudEventV1[];
+  meta: { request_id: string; api_version: 'v1'; limit: number; next_cursor: string | null; has_more: boolean };
+}
+
+export interface EventSubscribeInput {
+  callbackUrl: string;
+  eventTypes: string[];
+  description?: string;
+}
+
+export interface EventSubscription {
+  id: string;
+  callback_url: string;
+  description: string;
+  event_types: string[];
+  status: string;
+  revision: number;
+  verified_at: string | null;
+  start_after_sequence: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EventSubscriptionResult extends FadResponse<EventSubscription> {
+  etag: string;
+}
+
+export interface EventSubscriptionSecret {
+  subscription: EventSubscription;
+  signing_secret: string;
+  signing_key_id: string;
+  overlap_expires_at?: string;
+}
+
+export interface EventSubscriptionSecretResult extends FadResponse<EventSubscriptionSecret> {
+  etag: string;
+}
+
+export interface EventSubscriptionPage {
+  data: EventSubscription[];
+  meta: EventPage['meta'];
+}
+
+export interface EventSubscriptionPatch {
+  status: 'active' | 'paused' | 'disabled';
+}
+
+export interface EventReplayInput {
+  afterSequence: number;
+  throughSequence: number;
+  reason: string;
+}
+
+export interface EventReplay {
+  id: string;
+  subscription_id: string;
+  after_sequence: number;
+  through_sequence: number;
+  status: string;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface EventDelivery {
+  id: string;
+  event_id: string;
+  subscription_id: string;
+  status: string;
+  attempt_count: number;
+  last_attempt_at: string | null;
+  last_http_status: number | null;
+}
+
+export interface EventDeliveryPage {
+  data: EventDelivery[];
+  meta: EventPage['meta'];
+}
+
+export interface VerifyFadWebhookInput {
+  rawBody: Uint8Array;
+  timestamp: string;
+  signature: string;
+  secret: string;
+  maxAgeSeconds?: number;
+  now?: () => number;
+}
+
+/** Compare the HMAC over the exact raw body bytes. This function does not parse the body. */
+export function verifyFadWebhookSignature(input: VerifyFadWebhookInput): boolean {
+  const maxAge = input.maxAgeSeconds ?? 300;
+  if (!Number.isFinite(maxAge) || maxAge < 0 || maxAge > 86_400) return false;
+  if (typeof input.timestamp !== 'string' || !/^[0-9]{1,12}$/.test(input.timestamp)) return false;
+  if (typeof input.signature !== 'string' || !/^v1=[0-9a-f]{64}$/.test(input.signature)) return false;
+  if (typeof input.secret !== 'string' || input.secret.length === 0) return false;
+  if (!(input.rawBody instanceof Uint8Array)) return false;
+  const seconds = Number(input.timestamp);
+  const now = Math.floor((input.now ?? Date.now)() / 1000);
+  if (!Number.isFinite(seconds) || seconds > now + 60 || now - seconds > maxAge) return false;
+  const body = Buffer.isBuffer(input.rawBody) ? input.rawBody : Buffer.from(input.rawBody.buffer, input.rawBody.byteOffset, input.rawBody.byteLength);
+  const expected = createHmac('sha256', input.secret).update(input.timestamp, 'utf8').update('.').update(body).digest('hex');
+  const left = Buffer.from(input.signature.slice(3), 'utf8');
+  const right = Buffer.from(expected, 'utf8');
+  return left.length === right.length && timingSafeEqual(left, right);
 }
