@@ -46,6 +46,7 @@ export interface AppConfig {
   discoveryBodyMaxBytes: number;
   policiesEnabled: boolean;
   policyWriteBodyMaxBytes: number;
+  enforcementEnabled: boolean;
   mcp: McpConfig;
 }
 
@@ -194,6 +195,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     discoveryBodyMaxBytes: integer('FAD_DISCOVERY_BODY_MAX_BYTES', 16_384, 1, 16_384, env),
     policiesEnabled: env.FAD_POLICIES_ENABLED === 'true',
     policyWriteBodyMaxBytes: integer('FAD_POLICY_WRITE_BODY_MAX_BYTES', 65_536, 1, 65_536, env),
+    enforcementEnabled: env.FAD_ENFORCEMENT_CODE_ENABLED === 'true',
     mcp,
   };
 }

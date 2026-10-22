@@ -2,6 +2,8 @@ import { hasScope, type KnownScope } from '@fad/auth-core';
 import { API_VERSION, ERRORS, type ErrorCode } from '@fad/contract';
 import {
   AgentServiceError,
+  CommittedDenial,
+  EnforcementServiceError,
   BINDING_ETAG,
   ENDPOINT_ETAG,
   IdempotencyConflictError,
@@ -11,6 +13,8 @@ import {
   agentEtag,
   discoverAgents,
   getAgent,
+  getEnforcementConfig,
+  getEnforcementDecision,
   isDependencyError,
   listAgentTags,
   listAgents,
@@ -33,12 +37,14 @@ import {
   getPolicy,
   listPolicies,
   updateDraftPolicy,
+  preflightEnforcement,
   publishCapability,
   putAgentTag,
   putBinding,
   putEndpoint,
   registerAgent,
   searchAgents,
+  setEnforcementConfig,
   transitionAgent,
   updateAgent,
   type AgentStatus,
@@ -245,6 +251,26 @@ const evaluateSchema = z.strictObject({
   }).optional(),
 });
 
+const enforcementAction = z.enum(['agent.read', 'agent.discover', 'agent.update', 'agent.suspend']);
+const enforcementConfigSchema = z.strictObject({});
+const enforcementPreflightSchema = z.strictObject({
+  mode: z.enum(['shadow', 'enforce']),
+  actions: z.array(enforcementAction).min(1).max(4),
+  reason: z.string().min(3).max(500),
+});
+const enforcementSetSchema = z.strictObject({
+  mode: z.enum(['off', 'shadow', 'enforce']),
+  actions: z.array(enforcementAction).max(4),
+  reason: z.string().min(3).max(500),
+  preflight_id: uuid.optional(),
+  acknowledge_default_deny: z.boolean(),
+  if_match: z.string().min(1).max(128),
+  idempotency_key: IDEM,
+});
+const enforcementDecisionSchema = z.strictObject({
+  decision_id: uuid,
+});
+
 interface ToolSpec {
   name: ApprovedMcpTool;
   title: string;
@@ -252,7 +278,7 @@ interface ToolSpec {
   scopes: readonly KnownScope[];
   readOnly: boolean;
   schema: z.ZodType;
-  feature: 'agent' | 'tags' | 'slice3' | 'policy';
+  feature: 'agent' | 'tags' | 'slice3' | 'policy' | 'enforcement';
 }
 
 const TOOLS: readonly ToolSpec[] = [
@@ -277,12 +303,17 @@ const TOOLS: readonly ToolSpec[] = [
   { name: 'fad_activate_policy', title: 'Activate policy', description: 'Activate a draft. Requires policies:write and policies:activate. This does not enforce the policy.', scopes: ['policies:write', 'policies:activate'], readOnly: false, schema: policyTransitionSchema, feature: 'policy' },
   { name: 'fad_disable_policy', title: 'Disable policy', description: 'Disable an active policy for later evaluations. Previous decision rows stay.', scopes: ['policies:write', 'policies:activate'], readOnly: false, schema: policyTransitionSchema, feature: 'policy' },
   { name: 'fad_evaluate_access', title: 'Evaluate access', description: 'Record a hypothetical decision. enforcement is not_enforced. This does not invoke an agent.', scopes: ['agents:read'], readOnly: false, schema: evaluateSchema, feature: 'policy' },
+  { name: 'fad_get_enforcement_config', title: 'Read enforcement config', description: 'Read this organization enforcement configuration. Requires enforcement:read.', scopes: ['enforcement:read'], readOnly: true, schema: enforcementConfigSchema, feature: 'enforcement' },
+  { name: 'fad_preflight_enforcement', title: 'Preflight enforcement', description: 'Check readiness for shadow or enforce. Requires enforcement:manage. Does not change the mode.', scopes: ['enforcement:manage'], readOnly: true, schema: enforcementPreflightSchema, feature: 'enforcement' },
+  { name: 'fad_set_enforcement_config', title: 'Set enforcement config', description: 'Change enforcement mode. Requires if_match, idempotency_key, and enforcement:manage.', scopes: ['enforcement:manage'], readOnly: false, schema: enforcementSetSchema, feature: 'enforcement' },
+  { name: 'fad_get_enforcement_decision', title: 'Read enforcement decision', description: 'Read one decision in this organization. Requires enforcement:audit.', scopes: ['enforcement:audit'], readOnly: true, schema: enforcementDecisionSchema, feature: 'enforcement' },
 ];
 
 function allowed(config: AppConfig, scopes: readonly string[], spec: ToolSpec): boolean {
   if (spec.feature === 'tags' && !config.tagsEnabled) return false;
   if (spec.feature === 'slice3' && !config.slice3Enabled) return false;
   if (spec.feature === 'policy' && !config.policiesEnabled) return false;
+  if (spec.feature === 'enforcement' && !config.enforcementEnabled) return false;
   if (config.mcp.toolset && !config.mcp.toolset.has(spec.name)) return false;
   if (spec.name === 'fad_evaluate_access') {
     return hasScope(scopes, 'agents:read')
@@ -325,6 +356,12 @@ function errorBody(requestId: string, code: string, message: string, retryable: 
 }
 
 function mapFailure(requestId: string, status: number, code: string): ToolBody {
+  if (code === 'POLICY_DENIED') {
+    return toolResult(errorBody(requestId, 'POLICY_DENIED', ERRORS.POLICY_DENIED, false), true);
+  }
+  if (code === 'ENFORCEMENT_SCAN_BUDGET_EXCEEDED') {
+    return toolResult(errorBody(requestId, 'ENFORCEMENT_SCAN_BUDGET_EXCEEDED', ERRORS.ENFORCEMENT_SCAN_BUDGET_EXCEEDED, true), true);
+  }
   let mapped = 'VALIDATION_ERROR';
   let message: string = ERRORS.VALIDATION_ERROR;
   let retryable = false;
@@ -367,6 +404,9 @@ function fail(requestId: string, error: unknown, log: McpToolDeps['log']): ToolB
     log.info({ metric: 'mcp_tool_denied', code: error.code }, 'mcp');
     return mapFailure(requestId, error.status, error.code);
   }
+  if (error instanceof CommittedDenial || error instanceof EnforcementServiceError) {
+    return mapFailure(requestId, error.statusCode, error.code);
+  }
   if (error instanceof AgentServiceError || error instanceof TagServiceError || error instanceof Slice3ServiceError || error instanceof PolicyServiceError) {
     if (error.status === 403 || error.status === 401) log.info({ metric: 'mcp_tool_denied', code: error.code }, 'mcp');
     return mapFailure(requestId, error.status, error.code);
@@ -389,12 +429,18 @@ async function reauthorize(deps: McpToolDeps, token: string, required: readonly 
   return result.principal;
 }
 
-function actorOf(principal: McpPrincipal, requestId: string): { organizationId: string; principalId: string; requestId: string } {
-  return { organizationId: principal.organizationId, principalId: principal.principalId, requestId };
+function actorOf(principal: McpPrincipal, requestId: string): { organizationId: string; principalId: string; requestId: string; scopes: readonly string[]; channel: 'mcp' } {
+  return {
+    organizationId: principal.organizationId,
+    principalId: principal.principalId,
+    requestId,
+    scopes: principal.scopes,
+    channel: 'mcp',
+  };
 }
 
 function scoped(principal: McpPrincipal, requestId: string): TagActor & Slice3Actor {
-  return { ...actorOf(principal, requestId), scopes: principal.scopes };
+  return actorOf(principal, requestId);
 }
 
 function agentList(args: z.infer<typeof listAgentsSchema>): { status: AgentStatus | null; limit: number; cursor: string | null } {
@@ -426,12 +472,12 @@ async function runTool(deps: McpToolDeps, spec: ToolSpec, token: string, request
     };
     if (spec.name === 'fad_list_agents') {
       const parsed = listAgentsSchema.parse(args);
-      const page = await listAgents(deps.pool, principal.organizationId, agentList(parsed), deps.config.pepper);
+      const page = await listAgents(deps.pool, principal.organizationId, agentList(parsed), deps.config.pepper, Date.now(), actorOf(principal, requestId));
       return toolResult(envelope(requestId, page.agents, { limit: page.limit, nextCursor: page.nextCursor }));
     }
     if (spec.name === 'fad_get_agent') {
       const parsed = getAgentSchema.parse(args);
-      const agent = await getAgent(deps.pool, principal.organizationId, parsed.agent_id);
+      const agent = await getAgent(deps.pool, principal.organizationId, parsed.agent_id, actorOf(principal, requestId));
       return toolResult(envelope(requestId, agent, { etag: agentEtag(agent.revision) }));
     }
     if (spec.name === 'fad_register_agent') {
@@ -609,6 +655,34 @@ async function runTool(deps: McpToolDeps, spec: ToolSpec, token: string, request
       const parsed = evaluateSchema.parse(args);
       const result = await evaluateAgentAccess(deps.pool, scoped(principal, requestId), parsed);
       return toolResult(envelope(requestId, result.body));
+    }
+    if (spec.name === 'fad_get_enforcement_config') {
+      enforcementConfigSchema.parse(args);
+      const loaded = await getEnforcementConfig(deps.pool, actorOf(principal, requestId));
+      return toolResult(envelope(requestId, loaded.config, { etag: loaded.etag }));
+    }
+    if (spec.name === 'fad_preflight_enforcement') {
+      const parsed = enforcementPreflightSchema.parse(args);
+      const result = await preflightEnforcement(deps.pool, actorOf(principal, requestId), parsed);
+      return toolResult(envelope(requestId, result));
+    }
+    if (spec.name === 'fad_set_enforcement_config') {
+      const parsed = enforcementSetSchema.parse(args);
+      parseIdempotencyKey(parsed.idempotency_key);
+      const body: Record<string, unknown> = {
+        mode: parsed.mode,
+        actions: parsed.actions,
+        reason: parsed.reason,
+        acknowledge_default_deny: parsed.acknowledge_default_deny,
+      };
+      if (parsed.preflight_id !== undefined) body.preflight_id = parsed.preflight_id;
+      const result = await setEnforcementConfig(deps.pool, actorOf(principal, requestId), parsed.idempotency_key, parsed.if_match, body);
+      return toolResult(envelope(requestId, result.config, { etag: result.etag }));
+    }
+    if (spec.name === 'fad_get_enforcement_decision') {
+      const parsed = enforcementDecisionSchema.parse(args);
+      const decision = await getEnforcementDecision(deps.pool, actorOf(principal, requestId), parsed.decision_id);
+      return toolResult(envelope(requestId, decision));
     }
     const parsed = discoverSchema.parse(args);
     if (parsed.query.tags && !hasScope(principal.scopes, 'tags:read')) throw new ToolDenied(403, 'FORBIDDEN');

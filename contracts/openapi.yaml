@@ -17,7 +17,9 @@ info:
     does not change /v1. Policy management and hypothetical evaluation are
     additive Slice 5 operations. A deployment serves those routes only when
     policies are enabled. An evaluation result is not enforcement and does
-    not authorize invocation.
+    not authorize invocation. Enforcement configuration is an additive
+    Slice 6 operation. A deployment serves those routes only when
+    enforcement code is enabled. The default mode is off.
 servers:
   - url: https://fad.example.internal
 security:
@@ -1297,6 +1299,126 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '503': { $ref: '#/components/responses/DependencyUnavailable' }
 
+
+  /v1/enforcement/config:
+    get:
+      tags: [PolicyEnforcement]
+      operationId: getEnforcementConfig
+      summary: Read own organization enforcement configuration
+      description: |
+        Returns off revision 0 when the organization has no stored configuration.
+        Requires enforcement:read. The tenant and actor come from the verified
+        credential. Request fields do not select either one.
+      responses:
+        '200':
+          description: Current enforcement configuration
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+            ETag: { $ref: '#/components/headers/EnforcementETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnforcementConfigResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    put:
+      tags: [PolicyEnforcement]
+      operationId: setEnforcementConfig
+      summary: Set own organization enforcement configuration
+      description: |
+        Requires a strong If-Match and an Idempotency-Key. Shadow and enforce
+        require a passing single-use preflight. Off is an audited privileged
+        change and does not require a preflight. Requires enforcement:manage.
+      parameters:
+        - { $ref: '#/components/parameters/EnforcementIfMatch' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EnforcementConfigSet' }
+      responses:
+        '200':
+          description: Updated enforcement configuration
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+            ETag: { $ref: '#/components/headers/EnforcementETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnforcementConfigResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/enforcement/preflight:
+    post:
+      tags: [PolicyEnforcement]
+      operationId: preflightEnforcement
+      summary: Preflight a shadow or enforce change
+      description: |
+        Records a short-lived single-use readiness result. It does not change
+        the enforcement mode. Requires enforcement:manage.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EnforcementPreflightRequest' }
+      responses:
+        '200':
+          description: Preflight result
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnforcementPreflightResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/enforcement/decisions/{decisionId}:
+    get:
+      tags: [PolicyEnforcement]
+      operationId: getEnforcementDecision
+      summary: Read one enforcement decision
+      description: |
+        Returns one decision recorded for this organization. A decision from
+        another organization is indistinguishable from a missing decision.
+        Requires enforcement:audit. The record omits policy text and tag values.
+      parameters:
+        - { $ref: '#/components/parameters/EnforcementDecisionId' }
+      responses:
+        '200':
+          description: Enforcement decision
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnforcementDecisionResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
 components:
   securitySchemes:
     FadApiKey:
@@ -1453,6 +1575,18 @@ components:
       in: query
       required: false
       schema: { type: string, minLength: 1, maxLength: 4096 }
+    EnforcementIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong enforcement ETag such as "enforcement-v0". Weak tags and wildcards are rejected.
+      schema: { type: string, pattern: '^"enforcement-v(0|[1-9][0-9]*)"$' }
+    EnforcementDecisionId:
+      name: decisionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
   headers:
     RequestId:
       description: Unique server-generated request correlation UUID.
@@ -1493,6 +1627,9 @@ components:
     PolicyETag:
       description: Strong ETag for this policy representation. It does not change an agent ETag.
       schema: { type: string, pattern: '^"policy-v[1-9][0-9]*"$' }
+    EnforcementETag:
+      description: Strong ETag for the enforcement configuration. It does not change an agent ETag.
+      schema: { type: string, pattern: '^"enforcement-v(0|[1-9][0-9]*)"$' }
   schemas:
     Liveness:
       type: object
@@ -2188,6 +2325,150 @@ components:
       properties:
         data: { $ref: '#/components/schemas/EvaluationDecision' }
         meta: { $ref: '#/components/schemas/ResponseMeta' }
+    EnforcementMode:
+      type: string
+      enum: ['off', shadow, enforce]
+    EnforcementTargetMode:
+      type: string
+      enum: [shadow, enforce]
+    EnforcementAction:
+      type: string
+      enum: [agent.read, agent.discover, agent.update, agent.suspend]
+    EnforcementActions:
+      type: array
+      minItems: 0
+      maxItems: 4
+      uniqueItems: true
+      items: { $ref: '#/components/schemas/EnforcementAction' }
+    EnforcementActiveActions:
+      type: array
+      minItems: 1
+      maxItems: 4
+      uniqueItems: true
+      items: { $ref: '#/components/schemas/EnforcementAction' }
+    EnforcementConfig:
+      type: object
+      additionalProperties: false
+      required: [organization_id, mode, actions, revision, updated_by, updated_at]
+      properties:
+        organization_id: { type: string, format: uuid }
+        mode: { $ref: '#/components/schemas/EnforcementMode' }
+        actions: { $ref: '#/components/schemas/EnforcementActions' }
+        revision: { type: integer, minimum: 0 }
+        updated_by:
+          oneOf:
+            - { type: string, format: uuid }
+            - { type: 'null' }
+        updated_at:
+          oneOf:
+            - { type: string, format: date-time }
+            - { type: 'null' }
+    EnforcementConfigResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/EnforcementConfig' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    EnforcementPreflightRequest:
+      type: object
+      additionalProperties: false
+      required: [mode, actions, reason]
+      properties:
+        mode: { $ref: '#/components/schemas/EnforcementTargetMode' }
+        actions: { $ref: '#/components/schemas/EnforcementActiveActions' }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    EnforcementPreflight:
+      type: object
+      additionalProperties: false
+      required: [preflight_id, mode, actions, passes, blockers, warnings, policy_snapshot_digest, expires_at]
+      properties:
+        preflight_id: { type: string, format: uuid }
+        mode: { $ref: '#/components/schemas/EnforcementTargetMode' }
+        actions: { $ref: '#/components/schemas/EnforcementActiveActions' }
+        passes: { type: boolean }
+        blockers:
+          type: array
+          maxItems: 100
+          items: { type: string, maxLength: 100 }
+        warnings:
+          type: array
+          maxItems: 100
+          items: { type: string, maxLength: 100 }
+        policy_snapshot_digest: { type: string, pattern: '^[0-9a-f]{64}$' }
+        expires_at: { type: string, format: date-time }
+    EnforcementPreflightResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/EnforcementPreflight' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    EnforcementConfigSet:
+      type: object
+      additionalProperties: false
+      required: [mode, actions, reason, acknowledge_default_deny]
+      properties:
+        mode: { $ref: '#/components/schemas/EnforcementMode' }
+        actions: { $ref: '#/components/schemas/EnforcementActions' }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+        preflight_id: { type: string, format: uuid }
+        acknowledge_default_deny: { type: boolean }
+      allOf:
+        - if:
+            properties:
+              mode: { const: 'off' }
+            required: [mode]
+          then:
+            properties:
+              actions: { type: array, maxItems: 0 }
+            not:
+              required: [preflight_id]
+        - if:
+            properties:
+              mode: { const: shadow }
+            required: [mode]
+          then:
+            required: [preflight_id]
+            properties:
+              actions: { $ref: '#/components/schemas/EnforcementActiveActions' }
+        - if:
+            properties:
+              mode: { const: enforce }
+            required: [mode]
+          then:
+            required: [preflight_id]
+            properties:
+              actions: { $ref: '#/components/schemas/EnforcementActiveActions' }
+              acknowledge_default_deny: { const: true }
+    EnforcementDecision:
+      type: object
+      additionalProperties: false
+      required: [id, request_id, agent_id, actor_principal_id, operation_id, action, channel, mode, outcome, reason_code, policy_decision_id, happened_at]
+      properties:
+        id: { type: string, format: uuid }
+        request_id: { type: string, format: uuid }
+        agent_id: { type: string, format: uuid }
+        actor_principal_id: { type: string, format: uuid }
+        operation_id: { type: string, minLength: 1, maxLength: 96 }
+        action: { $ref: '#/components/schemas/EnforcementAction' }
+        channel: { type: string, enum: [rest, mcp] }
+        mode: { $ref: '#/components/schemas/EnforcementTargetMode' }
+        outcome: { type: string, enum: [allowed, denied, would_allow, would_deny] }
+        reason_code: { type: string, minLength: 1, maxLength: 80 }
+        policy_decision_id:
+          oneOf:
+            - { type: string, format: uuid }
+            - { type: 'null' }
+        happened_at: { type: string, format: date-time }
+    EnforcementDecisionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/EnforcementDecision' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+
   responses:
     HealthUnavailable:
       description: Process is not ready to serve traffic

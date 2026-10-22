@@ -16,6 +16,18 @@ import {
   type LifecycleAction,
 } from './agent-rules.js';
 import { beginIdempotency, requestFingerprint, writeIdempotency } from './idempotency.js';
+import {
+  EnforcementServiceError,
+  authorizeCandidate,
+  beginShared,
+  decodeEnforcementCursor,
+  encodeEnforcementCursor,
+  enforceAgent,
+  enforcementCodeEnabled,
+  enforcementScanLimit,
+  loadEvalContext,
+  type EnforcementCaller,
+} from './enforcement.js';
 import { withTenant } from './tenant.js';
 
 const RETENTION_MS = 24 * 60 * 60 * 1000;
@@ -50,6 +62,18 @@ interface Actor {
   organizationId: string;
   principalId: string;
   requestId: string;
+  scopes?: readonly string[];
+  channel?: 'rest' | 'mcp';
+}
+
+function pepCaller(actor: Actor): EnforcementCaller {
+  return {
+    organizationId: actor.organizationId,
+    principalId: actor.principalId,
+    requestId: actor.requestId,
+    scopes: actor.scopes ?? [],
+    channel: actor.channel,
+  };
 }
 
 interface IdempotencyInput {
@@ -261,12 +285,42 @@ export async function registerAgent(pool: Pool, actor: Actor, idempotencyKey: st
   });
 }
 
-export async function getAgent(pool: Pool, organizationId: string, agentId: string): Promise<AgentRecord> {
+export async function getAgent(
+  pool: Pool,
+  organizationId: string,
+  agentId: string,
+  caller?: EnforcementCaller,
+): Promise<AgentRecord> {
   return withTenant(pool, organizationId, async (client) => {
+    await beginShared(client, organizationId);
+    if (enforcementCodeEnabled() && (!caller || caller.organizationId !== organizationId)) {
+      throw new EnforcementServiceError(503, 'DEPENDENCY_UNAVAILABLE');
+    }
+    await enforceAgent(client, caller, 'getAgent', agentId, 'read');
     const agent = await readAgent(client, organizationId, agentId, false);
     if (!agent) throw new AgentServiceError(404, 'AGENT_NOT_FOUND');
     return agent;
   });
+}
+
+async function queryAgents(
+  client: PoolClient,
+  organizationId: string,
+  status: AgentStatus | null,
+  position: { at: string; id: string } | null,
+  limit: number,
+): Promise<AgentRow[]> {
+  const result = await client.query<AgentRow>(
+    `SELECT ${AGENT_COLUMNS}, ${CREATED_AT_EXACT}
+     FROM agents
+     WHERE organization_id = $1
+       AND ($2::text IS NULL OR status = $2)
+       AND ($3::timestamptz IS NULL OR (created_at, id) < ($3::timestamptz, $4::uuid))
+     ORDER BY created_at DESC, id DESC
+     LIMIT $5`,
+    [organizationId, status, position?.at ?? null, position?.id ?? null, limit],
+  );
+  return result.rows;
 }
 
 export async function listAgents(
@@ -275,28 +329,79 @@ export async function listAgents(
   query: { status: AgentStatus | null; limit: number; cursor: string | null },
   pepper: Buffer,
   now = Date.now(),
+  caller?: EnforcementCaller | null,
 ): Promise<{ agents: AgentRecord[]; limit: number; nextCursor: string | null }> {
-  const position = query.cursor ? decodeCursor(pepper, query.cursor, { org: organizationId, status: query.status }, now) : null;
   return withTenant(pool, organizationId, async (client) => {
-    const result = await client.query<AgentRow>(
-      `SELECT ${AGENT_COLUMNS}, ${CREATED_AT_EXACT}
-       FROM agents
-       WHERE organization_id = $1
-         AND ($2::text IS NULL OR status = $2)
-         AND ($3::timestamptz IS NULL OR (created_at, id) < ($3::timestamptz, $4::uuid))
-       ORDER BY created_at DESC, id DESC
-       LIMIT $5`,
-      [organizationId, query.status, position?.at ?? null, position?.id ?? null, query.limit + 1],
-    );
-    const page = result.rows.slice(0, query.limit).map((row) => toAgent(row));
-    const more = result.rows.length > query.limit;
-    const boundary = more ? result.rows[query.limit - 1] : undefined;
-    const nextCursor = boundary?.created_at_exact
-      ? encodeCursor(pepper, {
+    await beginShared(client, organizationId);
+    if (enforcementCodeEnabled() && (!caller || caller.organizationId !== organizationId)) {
+      throw new EnforcementServiceError(503, 'DEPENDENCY_UNAVAILABLE');
+    }
+    const context = caller ? await loadEvalContext(client, caller, 'listAgents') : null;
+    if (!context || context.mode !== 'enforce') {
+      const position = query.cursor ? decodeCursor(pepper, query.cursor, { org: organizationId, status: query.status }, now) : null;
+      const rows = await queryAgents(client, organizationId, query.status, position, query.limit + 1);
+      const page = rows.slice(0, query.limit).map((row) => toAgent(row));
+      if (context && caller) {
+        for (const agent of page) {
+          await authorizeCandidate(client, caller, context, 'listAgents', agent);
+        }
+      }
+      const boundary = rows.length > query.limit ? rows[query.limit - 1] : undefined;
+      const nextCursor = boundary?.created_at_exact
+        ? encodeCursor(pepper, { org: organizationId, status: query.status, at: boundary.created_at_exact, id: boundary.id }, now)
+        : null;
+      return { agents: page, limit: query.limit, nextCursor };
+    }
+    const filter = `status:${query.status ?? '*'}`;
+    const start = query.cursor
+      ? decodeEnforcementCursor(pepper, query.cursor, {
         org: organizationId,
-        status: query.status,
-        at: boundary.created_at_exact,
-        id: boundary.id,
+        principal: caller!.principalId,
+        filter,
+        mode: 'enforce',
+        revision: context.revision,
+        operation: 'listAgents',
+      }, now)
+      : null;
+    const budget = enforcementScanLimit();
+    const page: AgentRecord[] = [];
+    let at = start?.at ?? null;
+    let id = start?.id ?? null;
+    let scanned = 0;
+    let more = false;
+    while (page.length < query.limit && scanned < budget) {
+      const room = Math.min(100, budget - scanned);
+      const rows = await queryAgents(client, organizationId, query.status, at && id ? { at, id } : null, room + 1);
+      if (rows.length === 0) {
+        more = false;
+        break;
+      }
+      let index = 0;
+      while (index < rows.length && index < room && page.length < query.limit && scanned < budget) {
+        const row = rows[index];
+        if (!row?.created_at_exact) throw new EnforcementServiceError(503, 'DEPENDENCY_UNAVAILABLE');
+        scanned += 1;
+        at = row.created_at_exact;
+        id = row.id;
+        const agent = toAgent(row);
+        const allowed = await authorizeCandidate(client, caller!, context, 'listAgents', agent);
+        if (allowed) page.push(agent);
+        index += 1;
+      }
+      more = index < rows.length;
+      if (!more || page.length >= query.limit) break;
+    }
+    if (more && page.length < query.limit) throw new EnforcementServiceError(503, 'ENFORCEMENT_SCAN_BUDGET_EXCEEDED');
+    const nextCursor = more && at && id
+      ? encodeEnforcementCursor(pepper, {
+        org: organizationId,
+        principal: caller!.principalId,
+        filter,
+        mode: 'enforce',
+        revision: context.revision,
+        operation: 'listAgents',
+        at,
+        id,
       }, now)
       : null;
     return { agents: page, limit: query.limit, nextCursor };
@@ -323,11 +428,18 @@ export async function updateAgent(
   const idem = { key: idempotencyKey, ifMatch };
   const resourcePath = `/v1/agents/${agentId}`;
   return withTenant(pool, actor.organizationId, async (client) => {
+    await beginShared(client, actor.organizationId);
     await requireActor(client, actor);
     const replay = await claimOrReplay(client, actor, 'PATCH', resourcePath, idem, patch);
-    if (replay) return replay;
+    if (replay) {
+      await enforceAgent(client, pepCaller(actor), 'updateAgent', agentId, 'write');
+      return replay;
+    }
+    // Decision rows reference this agent. Lock the row before that insert so two
+    // writers cannot each hold the foreign key's KEY SHARE and deadlock on FOR UPDATE.
     const expected = etagRevision(ifMatch);
     const current = await lockAgent(client, actor, agentId, expected);
+    await enforceAgent(client, pepCaller(actor), 'updateAgent', agentId, 'write');
     if (current.status === 'retired') throw new AgentServiceError(409, 'INVALID_STATE_TRANSITION');
     const next = applyPatch(current, patch);
     if (next.ownerPrincipalId !== current.owner_principal_id) {
@@ -392,12 +504,19 @@ export async function transitionAgent(
   const idem = { key: idempotencyKey, ifMatch };
   const resourcePath = `/v1/agents/${agentId}/${action}`;
   const operation = action === 'suspend' ? 'suspended' : action === 'activate' ? 'activated' : 'retired';
+  const operationId = action === 'suspend' ? 'suspendAgent' : action === 'activate' ? 'activateAgent' : 'retireAgent';
   return withTenant(pool, actor.organizationId, async (client) => {
+    await beginShared(client, actor.organizationId);
     await requireActor(client, actor);
     const replay = await claimOrReplay(client, actor, 'POST', resourcePath, idem, { reason, action });
-    if (replay) return replay;
+    if (replay) {
+      await enforceAgent(client, pepCaller(actor), operationId, agentId, 'write');
+      return replay;
+    }
+    // Same lock order as updateAgent: the row lock precedes the decision insert.
     const expected = etagRevision(ifMatch);
     const current = await lockAgent(client, actor, agentId, expected);
+    await enforceAgent(client, pepCaller(actor), operationId, agentId, 'write');
     const step = nextStatus(current.status, action);
     if (step.kind === 'conflict') throw new AgentServiceError(409, 'INVALID_STATE_TRANSITION');
     if (step.kind === 'noop') {

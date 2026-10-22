@@ -3,9 +3,10 @@ import { randomUUID } from 'node:crypto';
 import Fastify, { LogController, type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { redactText } from '@fad/auth-core';
 import { contract, errorEnvelope, successEnvelope, type ErrorCode } from '@fad/contract';
-import { MCP_MIGRATION_VERSION, POLICY_MIGRATION_VERSION, SLICE3_MIGRATION_VERSION, TAG_MIGRATION_VERSION, cleanupRateLimits, consumeRateLimit, isDependencyError, rateLimitBucket, readMigrationFiles } from '@fad/db';
+import { ENFORCEMENT_MIGRATION_VERSION, MCP_MIGRATION_VERSION, POLICY_MIGRATION_VERSION, SLICE3_MIGRATION_VERSION, TAG_MIGRATION_VERSION, cleanupRateLimits, consumeRateLimit, isDependencyError, rateLimitBucket, readMigrationFiles } from '@fad/db';
 import type { Pool } from 'pg';
 import { registerAgentRoutes } from './agent-routes.js';
+import { registerEnforcementRoutes } from './enforcement-routes.js';
 import { JsonLimitError, assertJsonLimits } from './json-limits.js';
 import { registerMcpRoutes } from './mcp-routes.js';
 import { registerPolicyRoutes } from './policy-routes.js';
@@ -22,14 +23,16 @@ const CAPABILITY_VERSION_PATH = /^\/v1\/capabilities\/[^/]+\/versions\/[^/]+$/;
 const AGENT_ENDPOINT_PATH = /^\/v1\/agents\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/endpoints(?:\/[^/]+)?$/i;
 const AGENT_BINDING_PATH = /^\/v1\/agents\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/capabilities(?:\/[^/]+)?$/i;
 const POLICY_PATH = /^\/v1\/policies(?:\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}(?:\/(?:activate|disable))?)?$/i;
+const ENFORCEMENT_DECISION_PATH = /^\/v1\/enforcement\/decisions\/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function knownPath(path: string, tagsEnabled: boolean, slice3Enabled: boolean, mcpEnabled: boolean, policiesEnabled: boolean): boolean {
+function knownPath(path: string, tagsEnabled: boolean, slice3Enabled: boolean, mcpEnabled: boolean, policiesEnabled: boolean, enforcementEnabled: boolean): boolean {
   if (PATHS.has(path) || AGENT_PATH.test(path)) return true;
   if (mcpEnabled && (path === '/mcp' || path === '/.well-known/oauth-protected-resource/mcp')) return true;
   if (tagsEnabled && (path === '/v1/tag-definitions' || path === '/v1/agents/search' || TAG_DEFINITION_PATH.test(path) || AGENT_TAGS_PATH.test(path))) {
     return true;
   }
   if (policiesEnabled && (path === '/v1/policies' || path === '/v1/authorization/evaluate' || POLICY_PATH.test(path))) return true;
+  if (enforcementEnabled && (path === '/v1/enforcement/config' || path === '/v1/enforcement/preflight' || ENFORCEMENT_DECISION_PATH.test(path))) return true;
   if (!slice3Enabled) return false;
   if (path === '/v1/capabilities' || path === '/v1/discovery/agents') return true;
   return CAPABILITY_VERSION_PATH.test(path) || AGENT_ENDPOINT_PATH.test(path) || AGENT_BINDING_PATH.test(path);
@@ -107,8 +110,10 @@ export async function buildApp(options: {
     requestIdHeader: false,
     logController: new LogController({ disableRequestLogging: true }),
     bodyLimit: 16 * 1024,
-    requestTimeout: Math.max(config.requestTimeoutMs, config.mcp.enabled ? config.mcp.requestTimeoutMs : 0),
+    requestTimeout: Math.max(config.requestTimeoutMs, config.mcp.enabled ? config.mcp.requestTimeoutMs : 0) + 1000,
     trustProxy: config.trustProxy,
+    // Keep-alive clients must not keep shutdown waiting after open transactions are rolled back.
+    forceCloseConnections: true,
     logger: {
       level: config.logLevel,
       stream,
@@ -130,6 +135,9 @@ export async function buildApp(options: {
     try {
       if (path === '/mcp') assertJsonLimits(text, 32);
       if (config.policiesEnabled && (path === '/v1/policies' || path.startsWith('/v1/policies/') || path === '/v1/authorization/evaluate')) {
+        assertJsonLimits(text, 8);
+      }
+      if (config.enforcementEnabled && (path === '/v1/enforcement/config' || path === '/v1/enforcement/preflight')) {
         assertJsonLimits(text, 8);
       }
       done(null, JSON.parse(text) as unknown);
@@ -176,6 +184,18 @@ export async function buildApp(options: {
       return reply;
     }
     if (config.policiesEnabled && path === '/v1/authorization/evaluate' && request.method !== 'POST') {
+      sendError(reply, String(request.id), 405, 'METHOD_NOT_ALLOWED');
+      return reply;
+    }
+    if (config.enforcementEnabled && path === '/v1/enforcement/preflight' && request.method !== 'POST') {
+      sendError(reply, String(request.id), 405, 'METHOD_NOT_ALLOWED');
+      return reply;
+    }
+    if (config.enforcementEnabled && path === '/v1/enforcement/config' && request.method !== 'GET' && request.method !== 'PUT') {
+      sendError(reply, String(request.id), 405, 'METHOD_NOT_ALLOWED');
+      return reply;
+    }
+    if (config.enforcementEnabled && ENFORCEMENT_DECISION_PATH.test(path) && request.method !== 'GET') {
       sendError(reply, String(request.id), 405, 'METHOD_NOT_ALLOWED');
       return reply;
     }
@@ -269,7 +289,7 @@ export async function buildApp(options: {
   app.setNotFoundHandler((request, reply) => {
     const path = request.url.split('?')[0] ?? '';
     const requestId = String(request.id);
-    if (knownPath(path, config.tagsEnabled, config.slice3Enabled, config.mcp.enabled, config.policiesEnabled)) {
+    if (knownPath(path, config.tagsEnabled, config.slice3Enabled, config.mcp.enabled, config.policiesEnabled, config.enforcementEnabled)) {
       return sendError(reply, requestId, 405, 'METHOD_NOT_ALLOWED');
     }
     return sendError(reply, requestId, 404, 'NOT_FOUND');
@@ -321,6 +341,15 @@ export async function buildApp(options: {
           [POLICY_MIGRATION_VERSION],
         );
         if ((policySchema.rowCount ?? 0) !== 1) {
+          return send(reply, requestId, 503, { status: 'not_ready' }, 'HealthUnavailable', 'no-store');
+        }
+      }
+      if (config.enforcementEnabled) {
+        const enforcementSchema = await pool.query(
+          'SELECT 1 FROM schema_migrations WHERE version = $1',
+          [ENFORCEMENT_MIGRATION_VERSION],
+        );
+        if ((enforcementSchema.rowCount ?? 0) !== 1) {
           return send(reply, requestId, 503, { status: 'not_ready' }, 'HealthUnavailable', 'no-store');
         }
       }
@@ -395,6 +424,17 @@ export async function buildApp(options: {
 
   if (config.policiesEnabled) {
     registerPolicyRoutes(app, {
+      pool,
+      config,
+      send,
+      sendError,
+      limitRequest,
+      migrationsMatch,
+    });
+  }
+
+  if (config.enforcementEnabled) {
+    registerEnforcementRoutes(app, {
       pool,
       config,
       send,

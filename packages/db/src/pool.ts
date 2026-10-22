@@ -38,6 +38,21 @@ export async function withTransaction<T>(
     await client.query('COMMIT');
     return value;
   } catch (err) {
+    const commitDenial = typeof err === 'object' && err !== null && (err as { commitBeforeThrow?: boolean }).commitBeforeThrow === true;
+    if (commitDenial) {
+      try {
+        await client.query('COMMIT');
+        throw err;
+      } catch (commitError) {
+        if (commitError === err) throw err;
+        try {
+          await client.query('ROLLBACK');
+        } catch {
+          /* The transaction may already be aborted. */
+        }
+        throw commitError;
+      }
+    }
     try {
       await client.query('ROLLBACK');
     } catch {

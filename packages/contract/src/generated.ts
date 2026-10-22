@@ -427,3 +427,77 @@ export interface EvaluationResponse {
   meta: ResponseMeta;
 }
 
+export type EnforcementMode = "off" | "shadow" | "enforce";
+
+export type EnforcementTargetMode = "shadow" | "enforce";
+
+export type EnforcementAction = "agent.read" | "agent.discover" | "agent.update" | "agent.suspend";
+
+export type EnforcementActions = EnforcementAction[];
+
+export type EnforcementActiveActions = EnforcementAction[];
+
+export interface EnforcementConfig {
+  organization_id: string;
+  mode: EnforcementMode;
+  actions: EnforcementActions;
+  revision: number;
+  updated_by: unknown;
+  updated_at: unknown;
+}
+
+export interface EnforcementConfigResponse {
+  data: EnforcementConfig;
+  meta: ResponseMeta;
+}
+
+export interface EnforcementPreflightRequest {
+  mode: EnforcementTargetMode;
+  actions: EnforcementActiveActions;
+  reason: string;
+}
+
+export interface EnforcementPreflight {
+  preflight_id: string;
+  mode: EnforcementTargetMode;
+  actions: EnforcementActiveActions;
+  passes: boolean;
+  blockers: string[];
+  warnings: string[];
+  policy_snapshot_digest: string;
+  expires_at: string;
+}
+
+export interface EnforcementPreflightResponse {
+  data: EnforcementPreflight;
+  meta: ResponseMeta;
+}
+
+export interface EnforcementConfigSet {
+  mode: EnforcementMode;
+  actions: EnforcementActions;
+  reason: string;
+  preflight_id?: string;
+  acknowledge_default_deny: boolean;
+}
+
+export interface EnforcementDecision {
+  id: string;
+  request_id: string;
+  agent_id: string;
+  actor_principal_id: string;
+  operation_id: string;
+  action: EnforcementAction;
+  channel: "rest" | "mcp";
+  mode: EnforcementTargetMode;
+  outcome: "allowed" | "denied" | "would_allow" | "would_deny";
+  reason_code: string;
+  policy_decision_id: unknown;
+  happened_at: string;
+}
+
+export interface EnforcementDecisionResponse {
+  data: EnforcementDecision;
+  meta: ResponseMeta;
+}
+

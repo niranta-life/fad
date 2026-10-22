@@ -1,0 +1,28 @@
+TIME=2026-10-22T05:39:36Z
+----- kubectl version -----
+Client Version: v1.34.1
+Kustomize Version: v5.7.1
+----- contexts -----
+CURRENT   NAME   CLUSTER   AUTHINFO   NAMESPACE
+----- cluster-info -----
+E1021 22:39:36.787976   40631 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"http://localhost:8080/api?timeout=32s\": dial tcp [::1]:8080: connect: connection refused"
+E1021 22:39:36.788425   40631 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"http://localhost:8080/api?timeout=32s\": dial tcp [::1]:8080: connect: connection refused"
+E1021 22:39:36.789829   40631 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"http://localhost:8080/api?timeout=32s\": dial tcp [::1]:8080: connect: connection refused"
+E1021 22:39:36.790258   40631 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"http://localhost:8080/api?timeout=32s\": dial tcp [::1]:8080: connect: connection refused"
+E1021 22:39:36.791443   40631 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"http://localhost:8080/api?timeout=32s\": dial tcp [::1]:8080: connect: connection refused"
+
+To further debug and diagnose cluster problems, use 'kubectl cluster-info dump'.
+The connection to the server localhost:8080 was refused - did you specify the right host or port?
+----- tools -----
+kind: absent
+minikube: absent
+k3d: absent
+k3s: absent
+----- apply dry-run client -----
+error: error validating "deploy/k8s/policy-overlay.yaml": error validating data: failed to download openapi: Get "http://localhost:8080/openapi/v2?timeout=32s": dial tcp [::1]:8080: connect: connection refused; if you choose to ignore these errors, turn validation off with --validate=false
+----- apply server -----
+error: error validating "deploy/k8s/policy-overlay.yaml": error validating data: failed to download openapi: Get "http://localhost:8080/openapi/v2?timeout=32s": dial tcp [::1]:8080: connect: connection refused; if you choose to ignore these errors, turn validation off with --validate=false
+----- apply dry-run client validate false -----
+TIME=2026-10-22T05:39:55Z
+E1021 22:39:55.378522   40931 memcache.go:265] "Unhandled Error" err="couldn't get current server API group list: Get \"http://localhost:8080/api?timeout=32s\": dial tcp [::1]:8080: connect: connection refused"
+error: unable to recognize "deploy/k8s/policy-overlay.yaml": Get "http://localhost:8080/api?timeout=32s": dial tcp [::1]:8080: connect: connection refused

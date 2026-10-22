@@ -6,6 +6,8 @@ import {
   BINDING_ETAG,
   ENDPOINT_ETAG,
   IdempotencyConflictError,
+  CommittedDenial,
+  EnforcementServiceError,
   Slice3ServiceError,
   TagServiceError,
   deleteBinding,
@@ -292,6 +294,9 @@ async function authorize(
 }
 
 function fail(deps: RouteDeps, reply: FastifyReply, requestId: string, error: unknown): FastifyReply | undefined {
+  if (error instanceof CommittedDenial || error instanceof EnforcementServiceError) {
+    return deps.sendError(reply, requestId, error.statusCode, error.code);
+  }
   if (error instanceof Slice3ServiceError || error instanceof TagServiceError || error instanceof AgentServiceError) {
     return deps.sendError(reply, requestId, error.status, error.code);
   }

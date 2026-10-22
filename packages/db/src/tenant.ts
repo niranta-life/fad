@@ -8,6 +8,9 @@ export function withTenant<T>(pool: Pool, organizationId: string, fn: (client: P
   }
   return withTransaction(pool, fn, async (client) => {
     await client.query(`SELECT set_config('fad.org_id', $1, true)`, [organizationId]);
+    if (process.env.FAD_ENFORCEMENT_CODE_ENABLED === 'true') {
+      await client.query(`SELECT set_config('fad.pep_generation', '6', true)`);
+    }
   });
 }
 

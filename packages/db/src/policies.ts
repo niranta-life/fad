@@ -25,6 +25,7 @@ import {
   type StoredPolicyRule,
   type TagFact,
 } from './policy-rules.js';
+import { beginExclusive, enforcedActionSet, selectorsUngoverned } from './enforcement.js';
 import { withTenant } from './tenant.js';
 import { withTransaction } from './pool.js';
 
@@ -100,7 +101,7 @@ export async function createPolicy(
   body: unknown,
 ): Promise<PolicyCommandResult> {
   const definition = parsePolicyDefinition(body);
-  return mutate(pool, actor, 'POST', '/v1/policies', idempotencyKey, null, body, async (client) => {
+  return mutate(pool, actor, 'POST', '/v1/policies', idempotencyKey, null, body, {}, async (client) => {
     await requireActor(client, actor);
     await assertReferences(client, actor, definition);
     const id = randomUUID();
@@ -135,7 +136,7 @@ export async function updateDraftPolicy(
   const precondition = parsePolicyPrecondition(ifMatch);
   if (precondition.kind === 'missing') throw new PolicyServiceError(428, 'PRECONDITION_REQUIRED');
   const definition = parsePolicyDefinition(body, policyId);
-  return mutate(pool, actor, 'PUT', `/v1/policies/${policyId}`, idempotencyKey, ifMatch ?? null, body, async (client) => {
+  return mutate(pool, actor, 'PUT', `/v1/policies/${policyId}`, idempotencyKey, ifMatch ?? null, body, {}, async (client) => {
     await requireActor(client, actor);
     const current = await lockPolicy(client, actor.organizationId, policyId);
     if (!current) throw new PolicyServiceError(404, 'NOT_FOUND');
@@ -367,7 +368,7 @@ async function transition(
   const precondition = parsePolicyPrecondition(ifMatch);
   if (precondition.kind === 'missing') throw new PolicyServiceError(428, 'PRECONDITION_REQUIRED');
   const path = `/v1/policies/${policyId}/${next === 'active' ? 'activate' : 'disable'}`;
-  return mutate(pool, actor, 'POST', path, idempotencyKey, ifMatch ?? null, null, async (client) => {
+  return mutate(pool, actor, 'POST', path, idempotencyKey, ifMatch ?? null, null, { exclusive: true }, async (client) => {
     await requireActor(client, actor);
     if (next === 'active') {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`fad-policy-active:${actor.organizationId}`]);
@@ -379,6 +380,21 @@ async function transition(
     if (next === 'active' && current.status !== 'draft') throw new PolicyServiceError(409, 'INVALID_STATE_TRANSITION');
     if (next === 'disabled' && current.status !== 'active') throw new PolicyServiceError(409, 'INVALID_STATE_TRANSITION');
     if (next === 'active') {
+      const enforced = await enforcedActionSet(client, actor.organizationId);
+      if (enforced && enforced.length > 0) {
+        const definition = definitionFrom(current);
+        const ungoverned = await selectorsUngoverned(client, actor.organizationId, [{
+          id: current.id,
+          revision: current.revision,
+          effect: definition.effect,
+          actions: definition.actions,
+          principalIds: definition.principalIds,
+          agentIds: definition.agentIds,
+          tagsAll: definition.tagsAll,
+          containsRestricted: current.contains_restricted_tags,
+        }], enforced);
+        if (ungoverned) throw new PolicyServiceError(409, 'CONFLICT');
+      }
       await assertReferences(client, actor, definitionFrom(current));
       const count = await client.query<{ n: string }>(
         `SELECT count(*)::text AS n FROM fad_policies WHERE organization_id = $1 AND status = 'active'`,
@@ -413,11 +429,13 @@ async function mutate(
   idempotencyKey: string,
   ifMatch: string | null,
   body: unknown,
+  options: { exclusive?: boolean },
   fn: (client: PoolClient) => Promise<PolicyCommandResult>,
 ): Promise<PolicyCommandResult> {
   const fingerprint = requestFingerprint(method, path, canonicalJson({ body, if_match: ifMatch }));
   return withTenant(pool, actor.organizationId, async (client) => {
     try {
+      if (options.exclusive) await beginExclusive(client, actor.organizationId);
       const claim = await beginIdempotency(client, {
         organizationId: actor.organizationId,
         principalId: actor.principalId,
@@ -523,6 +541,9 @@ function withRepeatableTenant<T>(pool: Pool, organizationId: string, fn: (client
   return withTransaction(pool, fn, async (client) => {
     await client.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
     await client.query(`SELECT set_config('fad.org_id', $1, true)`, [organizationId]);
+    if (process.env.FAD_ENFORCEMENT_CODE_ENABLED === 'true') {
+      await client.query(`SELECT set_config('fad.pep_generation', '6', true)`);
+    }
   });
 }
 

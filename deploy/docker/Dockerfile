@@ -39,7 +39,7 @@ RUN ln -s libz.so.1.3.1 /usr/local/lib/libz.so.1 \
  && ldconfig \
  && dpkg --purge --force-depends zlib1g \
  && ldconfig
-ENV NODE_ENV=production PORT=8080 HOME=/tmp LD_LIBRARY_PATH=/usr/local/lib FAD_POLICIES_ENABLED=false
+ENV NODE_ENV=production PORT=8080 HOME=/tmp LD_LIBRARY_PATH=/usr/local/lib FAD_POLICIES_ENABLED=false FAD_ENFORCEMENT_CODE_ENABLED=false
 WORKDIR /srv/fad
 COPY --from=build --chown=node:node /srv/fad/package.json /srv/fad/package-lock.json ./
 COPY --from=build --chown=node:node /srv/fad/node_modules ./node_modules

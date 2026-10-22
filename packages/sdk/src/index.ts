@@ -354,6 +354,56 @@ export interface EvaluateRequest {
   resource: { type: 'agent'; id: string };
   context?: { purpose?: string; correlation_id?: string };
 }
+export type EnforcementMode = 'off' | 'shadow' | 'enforce';
+export type EnforceableAction = 'agent.read' | 'agent.discover' | 'agent.update' | 'agent.suspend';
+export interface EnforcementConfig {
+  organization_id: string;
+  mode: EnforcementMode;
+  actions: EnforceableAction[];
+  revision: number;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+export interface EnforcementPreflightInput {
+  mode: 'shadow' | 'enforce';
+  actions: EnforceableAction[];
+  reason: string;
+}
+export interface EnforcementPreflight {
+  preflight_id: string;
+  mode: 'shadow' | 'enforce';
+  actions: EnforceableAction[];
+  passes: boolean;
+  blockers: string[];
+  warnings: string[];
+  policy_snapshot_digest: string;
+  expires_at: string;
+}
+export interface SetEnforcementInput {
+  mode: EnforcementMode;
+  actions: EnforceableAction[];
+  reason: string;
+  preflight_id?: string;
+  acknowledge_default_deny: boolean;
+}
+export interface EnforcementMutationOptions extends CallOptions {
+  ifMatch: string;
+  idempotencyKey: string;
+}
+export interface EnforcementDecision {
+  id: string;
+  request_id: string;
+  agent_id: string;
+  actor_principal_id: string;
+  operation_id: string;
+  action: string;
+  channel: 'rest' | 'mcp' | (string & {});
+  mode: 'shadow' | 'enforce' | (string & {});
+  outcome: 'allowed' | 'denied' | 'would_allow' | 'would_deny' | (string & {});
+  reason_code: string;
+  policy_decision_id: string | null;
+  happened_at: string;
+}
 
 interface IdempotentOptions extends CallOptions {
   idempotencyKey: string;
@@ -376,6 +426,41 @@ export class FadApiError extends Error {
     this.code = code;
     if (requestId !== undefined) this.requestId = requestId;
     if (retryAfterSeconds !== undefined) this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+export class PolicyDeniedError extends FadApiError {
+  constructor(status: number, code: string, message: string, requestId?: string, retryAfterSeconds?: number) {
+    super(status, code, message, requestId, retryAfterSeconds);
+    this.name = 'PolicyDeniedError';
+  }
+}
+
+export class PreconditionFailedError extends FadApiError {
+  constructor(status: number, code: string, message: string, requestId?: string, retryAfterSeconds?: number) {
+    super(status, code, message, requestId, retryAfterSeconds);
+    this.name = 'PreconditionFailedError';
+  }
+}
+
+export class PreconditionRequiredError extends FadApiError {
+  constructor(status: number, code: string, message: string, requestId?: string, retryAfterSeconds?: number) {
+    super(status, code, message, requestId, retryAfterSeconds);
+    this.name = 'PreconditionRequiredError';
+  }
+}
+
+export class ConflictError extends FadApiError {
+  constructor(status: number, code: string, message: string, requestId?: string, retryAfterSeconds?: number) {
+    super(status, code, message, requestId, retryAfterSeconds);
+    this.name = 'ConflictError';
+  }
+}
+
+export class ServiceUnavailableError extends FadApiError {
+  constructor(status: number, code: string, message: string, requestId?: string, retryAfterSeconds?: number) {
+    super(status, code, message, requestId, retryAfterSeconds);
+    this.name = 'ServiceUnavailableError';
   }
 }
 
@@ -614,6 +699,16 @@ export class FadClient {
 
   readonly authorization = {
     evaluate: (body: EvaluateRequest, options?: CallOptions): Promise<FadResponse<Decision>> => this.evaluateAccess(body, options),
+  };
+
+  readonly enforcement = {
+    getConfig: (options?: CallOptions): Promise<FadResponse<EnforcementConfig> & { etag: string }> => this.enforcementGetConfig(options),
+    preflight: (body: EnforcementPreflightInput, options?: CallOptions): Promise<FadResponse<EnforcementPreflight>> =>
+      this.enforcementPreflight(body, options),
+    setConfig: (body: SetEnforcementInput, options: EnforcementMutationOptions): Promise<FadResponse<EnforcementConfig> & { etag: string }> =>
+      this.enforcementSetConfig(body, options),
+    getDecision: (decisionId: string, options?: CallOptions): Promise<FadResponse<EnforcementDecision>> =>
+      this.enforcementGetDecision(decisionId, options),
   };
 
   private async healthCall<T extends { status: string }>(
@@ -1295,6 +1390,48 @@ export class FadClient {
     if (response.status === 200 && isDecisionResponse(parsed)) return parsed;
     throw errorFrom(response, parsed, key);
   }
+
+  private async enforcementGetConfig(options?: CallOptions): Promise<FadResponse<EnforcementConfig> & { etag: string }> {
+    const key = await this.resolveKey();
+    const response = await this.send('/v1/enforcement/config', true, options?.signal, key);
+    const body = await readJson(response, key);
+    if (response.status === 200 && isEnforcementConfigResponse(body)) return withResourceEtag(response, body);
+    throw errorFrom(response, body, key);
+  }
+
+  private async enforcementPreflight(body: EnforcementPreflightInput, options?: CallOptions): Promise<FadResponse<EnforcementPreflight>> {
+    const key = await this.resolveKey();
+    const response = await this.sendJson('/v1/enforcement/preflight', 'POST', body, {}, options?.signal, key, false);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isEnforcementPreflightResponse(parsed)) return parsed;
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async enforcementSetConfig(
+    body: SetEnforcementInput,
+    options: EnforcementMutationOptions,
+  ): Promise<FadResponse<EnforcementConfig> & { etag: string }> {
+    if (typeof options.idempotencyKey !== 'string' || options.idempotencyKey.length === 0) {
+      throw new Error('idempotencyKey is required');
+    }
+    if (typeof options.ifMatch !== 'string' || options.ifMatch.length === 0) throw new Error('ifMatch is required');
+    const key = await this.resolveKey();
+    const response = await this.sendJson('/v1/enforcement/config', 'PUT', body, {
+      'Idempotency-Key': options.idempotencyKey,
+      'If-Match': options.ifMatch,
+    }, options.signal, key, false);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isEnforcementConfigResponse(parsed)) return withResourceEtag(response, parsed);
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async enforcementGetDecision(decisionId: string, options?: CallOptions): Promise<FadResponse<EnforcementDecision>> {
+    const key = await this.resolveKey();
+    const response = await this.send(`/v1/enforcement/decisions/${encodeURIComponent(decisionId)}`, true, options?.signal, key);
+    const body = await readJson(response, key);
+    if (response.status === 200 && isEnforcementDecisionResponse(body)) return body;
+    throw errorFrom(response, body, key);
+  }
 }
 
 function conditionalHeaders(options: ConditionalWriteOptions): Record<string, string> {
@@ -1341,7 +1478,15 @@ function errorFrom(response: Response, body: unknown, secret: string): FadApiErr
   const message = isRecord(body) && isRecord(body.error) && typeof body.error.message === 'string'
     ? scrub(body.error.message, secret)
     : 'Request failed';
-  return new FadApiError(response.status, code, message, requestId, retryHeader(response));
+  const retryAfter = retryHeader(response);
+  if (response.status === 403 && code === 'POLICY_DENIED') {
+    return new PolicyDeniedError(response.status, code, message, requestId, retryAfter);
+  }
+  if (response.status === 412) return new PreconditionFailedError(response.status, code, message, requestId, retryAfter);
+  if (response.status === 428) return new PreconditionRequiredError(response.status, code, message, requestId, retryAfter);
+  if (response.status === 409) return new ConflictError(response.status, code, message, requestId, retryAfter);
+  if (response.status === 503) return new ServiceUnavailableError(response.status, code, message, requestId, retryAfter);
+  return new FadApiError(response.status, code, message, requestId, retryAfter);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1604,4 +1749,50 @@ function isDecisionResponse(value: unknown): value is FadResponse<Decision> {
     && data.enforcement === 'not_enforced'
     && typeof data.evaluated_at === 'string'
     && typeof data.resource_revision === 'number';
+}
+
+function isEnforcementConfig(value: unknown): value is EnforcementConfig {
+  if (!isRecord(value) || !Array.isArray(value.actions)) return false;
+  return typeof value.organization_id === 'string'
+    && (value.mode === 'off' || value.mode === 'shadow' || value.mode === 'enforce')
+    && value.actions.every((item) => typeof item === 'string')
+    && typeof value.revision === 'number'
+    && (value.updated_by === null || typeof value.updated_by === 'string')
+    && (value.updated_at === null || typeof value.updated_at === 'string');
+}
+
+function isEnforcementConfigResponse(value: unknown): value is FadResponse<EnforcementConfig> {
+  return isRecord(value) && isEnforcementConfig(value.data) && isMeta(value.meta);
+}
+
+function isEnforcementPreflightResponse(value: unknown): value is FadResponse<EnforcementPreflight> {
+  if (!isRecord(value) || !isRecord(value.data) || !isMeta(value.meta) || !Array.isArray(value.data.actions)) return false;
+  const data = value.data;
+  const actions = data.actions;
+  return typeof data.preflight_id === 'string'
+    && (data.mode === 'shadow' || data.mode === 'enforce')
+    && Array.isArray(actions)
+    && actions.every((item) => typeof item === 'string')
+    && typeof data.passes === 'boolean'
+    && Array.isArray(data.blockers)
+    && Array.isArray(data.warnings)
+    && typeof data.policy_snapshot_digest === 'string'
+    && typeof data.expires_at === 'string';
+}
+
+function isEnforcementDecisionResponse(value: unknown): value is FadResponse<EnforcementDecision> {
+  if (!isRecord(value) || !isRecord(value.data) || !isMeta(value.meta)) return false;
+  const data = value.data;
+  return typeof data.id === 'string'
+    && typeof data.request_id === 'string'
+    && typeof data.agent_id === 'string'
+    && typeof data.actor_principal_id === 'string'
+    && typeof data.operation_id === 'string'
+    && typeof data.action === 'string'
+    && typeof data.channel === 'string'
+    && typeof data.mode === 'string'
+    && typeof data.outcome === 'string'
+    && typeof data.reason_code === 'string'
+    && (data.policy_decision_id === null || typeof data.policy_decision_id === 'string')
+    && typeof data.happened_at === 'string';
 }

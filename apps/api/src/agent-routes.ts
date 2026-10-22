@@ -3,6 +3,8 @@ import { hasScope, isUuid, type KnownScope } from '@fad/auth-core';
 import { API_VERSION, successEnvelope, type ErrorCode } from '@fad/contract';
 import {
   AgentServiceError,
+  CommittedDenial,
+  EnforcementServiceError,
   IdempotencyConflictError,
   agentEtag,
   getAgent,
@@ -39,6 +41,11 @@ interface RouteDeps {
 interface Caller {
   organizationId: string;
   principalId: string;
+  scopes: readonly string[];
+}
+
+function actorOf(caller: Caller, requestId: string) {
+  return { ...caller, requestId, channel: 'rest' as const };
 }
 
 export function registerAgentRoutes(app: FastifyInstance, deps: RouteDeps): void {
@@ -50,7 +57,7 @@ export function registerAgentRoutes(app: FastifyInstance, deps: RouteDeps): void
 
   app.get('/v1/agents', async (request, reply) => read(deps, request, reply, async (caller, requestId) => {
     const query = listQuery(request.query);
-    const page = await listAgents(deps.pool, caller.organizationId, query, deps.config.pepper);
+    const page = await listAgents(deps.pool, caller.organizationId, query, deps.config.pepper, Date.now(), actorOf(caller, requestId));
     return deps.send(reply, requestId, 200, {
       data: page.agents,
       meta: { request_id: requestId, api_version: API_VERSION, limit: page.limit, next_cursor: page.nextCursor },
@@ -58,7 +65,7 @@ export function registerAgentRoutes(app: FastifyInstance, deps: RouteDeps): void
   }));
 
   app.get('/v1/agents/:agentId', async (request, reply) => read(deps, request, reply, async (caller, requestId) => {
-    const agent = await getAgent(deps.pool, caller.organizationId, agentIdOf(request));
+    const agent = await getAgent(deps.pool, caller.organizationId, agentIdOf(request), actorOf(caller, requestId));
     return sendAgent(deps, reply, requestId, { status: 200, agent, etag: agentEtag(agent.revision) });
   }));
 
@@ -66,7 +73,7 @@ export function registerAgentRoutes(app: FastifyInstance, deps: RouteDeps): void
     requireJson(request);
     const result = await updateAgent(
       deps.pool,
-      { ...caller, requestId },
+      actorOf(caller, requestId),
       agentIdOf(request),
       idempotencyKey(request),
       ifMatch(request),
@@ -80,7 +87,7 @@ export function registerAgentRoutes(app: FastifyInstance, deps: RouteDeps): void
       requireJson(request);
       const result = await transitionAgent(
         deps.pool,
-        { ...caller, requestId },
+        actorOf(caller, requestId),
         agentIdOf(request),
         action,
         idempotencyKey(request),
@@ -170,7 +177,11 @@ async function authorize(
     deps.sendError(reply, requestId, 403, 'FORBIDDEN');
     return undefined;
   }
-  return { organizationId: verified.caller.organization.id, principalId: verified.caller.principalId };
+  return {
+    organizationId: verified.caller.organization.id,
+    principalId: verified.caller.principalId,
+    scopes: verified.caller.scopes,
+  };
 }
 
 function sendAgent(deps: RouteDeps, reply: FastifyReply, requestId: string, result: AgentCommandResult): FastifyReply {
@@ -180,6 +191,9 @@ function sendAgent(deps: RouteDeps, reply: FastifyReply, requestId: string, resu
 }
 
 function fail(deps: RouteDeps, reply: FastifyReply, requestId: string, error: unknown): FastifyReply | undefined {
+  if (error instanceof CommittedDenial || error instanceof EnforcementServiceError) {
+    return deps.sendError(reply, requestId, error.statusCode, error.code);
+  }
   if (error instanceof AgentServiceError) return deps.sendError(reply, requestId, error.status, error.code);
   if (error instanceof IdempotencyConflictError) return deps.sendError(reply, requestId, 409, 'IDEMPOTENCY_CONFLICT');
   if (isDependencyError(error)) return deps.sendError(reply, requestId, 503, 'DEPENDENCY_UNAVAILABLE');

@@ -49,6 +49,12 @@ const POLICY_OPERATIONS = [
   ['post', '/v1/policies/{policyId}/disable'],
   ['post', '/v1/authorization/evaluate'],
 ];
+const ENFORCEMENT_OPERATIONS = [
+  ['get', '/v1/enforcement/config'],
+  ['put', '/v1/enforcement/config'],
+  ['post', '/v1/enforcement/preflight'],
+  ['get', '/v1/enforcement/decisions/{decisionId}'],
+];
 const TAG_OPERATIONS = [
   ['post', '/v1/tag-definitions'],
   ['get', '/v1/tag-definitions'],
@@ -177,9 +183,10 @@ const expectedNew = TAG_OPERATIONS.map(([method, path]) => `${method} ${path}`).
 const expectedSlice3 = SLICE3_OPERATIONS.map(([method, path]) => `${method} ${path}`).sort();
 const expectedSlice4 = [...expectedSlice3, ...MCP_OPERATIONS.map(([method, path]) => `${method} ${path}`)].sort();
 const expectedSlice5 = [...expectedSlice4, ...POLICY_OPERATIONS.map(([method, path]) => `${method} ${path}`)].sort();
+const expectedSlice6 = [...expectedSlice5, ...ENFORCEMENT_OPERATIONS.map(([method, path]) => `${method} ${path}`)].sort();
 const parentNewSorted = [...parentNew].sort();
-if (!same(parentNewSorted, expectedSlice5)) {
-  breaking.push(`parent new operations are not exactly the slice 3, MCP, and policy routes: ${parentNew.join(', ')}`);
+if (!same(parentNewSorted, expectedSlice6)) {
+  breaking.push(`parent new operations are not exactly the slice 3, MCP, policy, and enforcement routes: ${parentNew.join(', ')}`);
 }
 const slice3Present = [];
 for (const [method, path] of SLICE3_OPERATIONS) {

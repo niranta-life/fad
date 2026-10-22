@@ -730,6 +730,9 @@ test('typed tags, search, isolation, and compatibility', { timeout: 300_000 }, a
     const previousDir = mkdtempSync(join(scratch, 's2-prev-'));
     cpSync(migrationsDir, previousDir, { recursive: true });
     rmSync(join(previousDir, '20261021_001_typed_tags.up.sql'));
+    // The enforcement trigger is created on agent_tag_assignments. A copy that
+    // omits the tags migration cannot apply that later trigger.
+    rmSync(join(previousDir, '20261021_006_policy_enforcement.up.sql'));
     await applyMigrations(gateUrl.toString(), previousDir);
     const gate = new Client({ connectionString: gateUrl.toString(), application_name: 'fad-tag-gate' });
     gate.on('error', () => undefined);
