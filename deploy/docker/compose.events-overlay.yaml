@@ -1,0 +1,28 @@
+# Opt-in overlay. The image leaves event capture off.
+# Set FAD_EVENTS_ENABLED=true on the API and the worker together.
+# Provide FAD_EVENTS_SECRET_KEY from the secret store. Do not commit the key.
+services:
+  api:
+    environment:
+      FAD_EVENTS_ENABLED: "${FAD_EVENTS_ENABLED:-false}"
+      FAD_EVENTS_SECRET_KEY: "${FAD_EVENTS_SECRET_KEY:-}"
+  worker:
+    image: fad-api:local
+    command: ["node", "apps/api/dist/event-worker.js"]
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://fad_app:${FAD_APP_DB_PASSWORD}@postgres:5432/fad
+      FAD_EVENTS_ENABLED: "${FAD_EVENTS_ENABLED:-false}"
+      FAD_EVENTS_SECRET_KEY: "${FAD_EVENTS_SECRET_KEY:-}"
+      FAD_API_KEY_PEPPER_V1: ${FAD_API_KEY_PEPPER_V1:?provide 32+ bytes from secret store}
+      FAD_DB_POOL_MAX: "4"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks: [internal]
+    restart: unless-stopped
+    init: true
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]

@@ -313,3 +313,323 @@ export interface DiscoveryResponse {
   meta: PageMeta;
 }
 
+export type PolicyAction = "agent.read" | "agent.discover" | "agent.invoke" | "agent.update" | "agent.suspend";
+
+export type PolicyEffect = "allow" | "deny";
+
+export type PolicyStatus = "draft" | "active" | "disabled";
+
+export interface PolicyTagPredicate {
+  namespace: string;
+  key: string;
+  operator: "eq";
+  value: unknown;
+}
+
+export interface PolicySubjects {
+  principal_ids: string[];
+}
+
+export interface PolicyResourceSelector {
+  type: "agent";
+  agent_ids?: string[];
+  tags_all?: PolicyTagPredicate[];
+}
+
+export interface PolicyDefinitionInput {
+  name: string;
+  description?: string;
+  effect: PolicyEffect;
+  actions: PolicyAction[];
+  subjects: PolicySubjects;
+  resource: PolicyResourceSelector;
+  supersedes_policy_id?: unknown;
+}
+
+export interface Policy {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string;
+  effect: PolicyEffect;
+  actions: PolicyAction[];
+  subjects: PolicySubjects;
+  resource: PolicyResourceSelector;
+  status: PolicyStatus;
+  revision: number;
+  contains_restricted_tags: boolean;
+  supersedes_policy_id: unknown;
+  created_at: string;
+  updated_at: string;
+  activated_at: unknown;
+  disabled_at: unknown;
+  created_by: string;
+  updated_by: string;
+}
+
+export interface PolicyResponse {
+  data: Policy;
+  meta: ResponseMeta;
+}
+
+export interface PolicyPage {
+  next_cursor: string | null;
+}
+
+export interface PolicyListResponse {
+  data: Policy[];
+  page: PolicyPage;
+  meta: ResponseMeta;
+}
+
+export interface EvaluationSubject {
+  principal_id: string;
+}
+
+export interface EvaluationResource {
+  type: "agent";
+  id: string;
+}
+
+export interface EvaluationContext {
+  purpose?: string;
+  correlation_id?: string;
+}
+
+export interface EvaluationRequest {
+  subject: EvaluationSubject;
+  action: PolicyAction;
+  resource: EvaluationResource;
+  context?: EvaluationContext;
+}
+
+export interface PolicyMatch {
+  policy_id: string;
+  revision: number;
+  effect: PolicyEffect;
+}
+
+export interface EvaluationDecision {
+  decision_id: string;
+  decision: "allow" | "deny";
+  reason_code: "EXPLICIT_ALLOW" | "EXPLICIT_DENY" | "NO_MATCHING_ALLOW" | "SUBJECT_INACTIVE" | "RESOURCE_INACTIVE";
+  enforcement: "not_enforced";
+  evaluated_at: string;
+  resource_revision: number;
+  policy_set_digest?: string;
+  input_digest?: string;
+  matched_policy_count?: number;
+  explanation?: PolicyMatch[];
+}
+
+export interface EvaluationResponse {
+  data: EvaluationDecision;
+  meta: ResponseMeta;
+}
+
+export type EnforcementMode = "off" | "shadow" | "enforce";
+
+export type EnforcementTargetMode = "shadow" | "enforce";
+
+export type EnforcementAction = "agent.read" | "agent.discover" | "agent.update" | "agent.suspend";
+
+export type EnforcementActions = EnforcementAction[];
+
+export type EnforcementActiveActions = EnforcementAction[];
+
+export interface EnforcementConfig {
+  organization_id: string;
+  mode: EnforcementMode;
+  actions: EnforcementActions;
+  revision: number;
+  updated_by: unknown;
+  updated_at: unknown;
+}
+
+export interface EnforcementConfigResponse {
+  data: EnforcementConfig;
+  meta: ResponseMeta;
+}
+
+export interface EnforcementPreflightRequest {
+  mode: EnforcementTargetMode;
+  actions: EnforcementActiveActions;
+  reason: string;
+}
+
+export interface EnforcementPreflight {
+  preflight_id: string;
+  mode: EnforcementTargetMode;
+  actions: EnforcementActiveActions;
+  passes: boolean;
+  blockers: string[];
+  warnings: string[];
+  policy_snapshot_digest: string;
+  expires_at: string;
+}
+
+export interface EnforcementPreflightResponse {
+  data: EnforcementPreflight;
+  meta: ResponseMeta;
+}
+
+export interface EnforcementConfigSet {
+  mode: EnforcementMode;
+  actions: EnforcementActions;
+  reason: string;
+  preflight_id?: string;
+  acknowledge_default_deny: boolean;
+}
+
+export interface EnforcementDecision {
+  id: string;
+  request_id: string;
+  agent_id: string;
+  actor_principal_id: string;
+  operation_id: string;
+  action: EnforcementAction;
+  channel: "rest" | "mcp";
+  mode: EnforcementTargetMode;
+  outcome: "allowed" | "denied" | "would_allow" | "would_deny";
+  reason_code: string;
+  policy_decision_id: unknown;
+  happened_at: string;
+}
+
+export interface EnforcementDecisionResponse {
+  data: EnforcementDecision;
+  meta: ResponseMeta;
+}
+
+export type DirectoryEventType = "com.fad.agent.registered.v1" | "com.fad.agent.updated.v1" | "com.fad.agent.lifecycle_changed.v1" | "com.fad.tag.definition_created.v1" | "com.fad.tag.assignment_changed.v1" | "com.fad.capability.published.v1" | "com.fad.agent.endpoint_changed.v1" | "com.fad.agent.capability_binding_changed.v1" | "com.fad.policy.lifecycle_changed.v1" | "com.fad.enforcement.config_changed.v1";
+
+export interface CloudEventData {
+  agent_id?: string;
+  revision?: number;
+  status?: string;
+  namespace?: string;
+  key?: string;
+  change?: "assigned" | "removed" | "upserted" | "deleted";
+  capability_id?: string;
+  version?: string;
+  endpoint_key?: string;
+  policy_id?: string;
+  mode?: "off" | "shadow" | "enforce";
+}
+
+export interface CloudEvent {
+  specversion: "1.0";
+  id: string;
+  source: string;
+  type: DirectoryEventType;
+  subject: string;
+  time: string;
+  datacontenttype: "application/json";
+  data: CloudEventData;
+  fadsequence?: number;
+}
+
+export interface EventPageMeta {
+  request_id: string;
+  api_version: "v1";
+  limit: number;
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
+export interface EventListResponse {
+  data: CloudEvent[];
+  meta: EventPageMeta;
+}
+
+export interface EventResponse {
+  data: CloudEvent;
+  meta: ResponseMeta;
+}
+
+export interface EventSubscription {
+  id: string;
+  callback_url: string;
+  description: string;
+  event_types: DirectoryEventType[];
+  status: "pending_verification" | "active" | "paused" | "disabled";
+  revision: number;
+  verified_at: string | null;
+  start_after_sequence: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EventSubscriptionCreate {
+  callback_url: string;
+  description?: string;
+  event_types: DirectoryEventType[];
+}
+
+export interface EventSubscriptionPatch {
+  status: "active" | "paused" | "disabled";
+}
+
+export interface EventSubscriptionSecret {
+  subscription: EventSubscription;
+  signing_secret: string;
+  signing_key_id: string;
+  overlap_expires_at?: string;
+}
+
+export interface EventSubscriptionCreateResponse {
+  data: EventSubscriptionSecret;
+  meta: ResponseMeta;
+}
+
+export interface EventSubscriptionRotateResponse {
+  data: EventSubscriptionSecret;
+  meta: ResponseMeta;
+}
+
+export interface EventSubscriptionResponse {
+  data: EventSubscription;
+  meta: ResponseMeta;
+}
+
+export interface EventSubscriptionListResponse {
+  data: EventSubscription[];
+  meta: EventPageMeta;
+}
+
+export interface EventReplay {
+  id: string;
+  subscription_id: string;
+  after_sequence: number;
+  through_sequence: number;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface EventReplayCreate {
+  after_sequence: number;
+  through_sequence: number;
+  reason: string;
+}
+
+export interface EventReplayResponse {
+  data: EventReplay;
+  meta: ResponseMeta;
+}
+
+export interface EventDelivery {
+  id: string;
+  event_id: string;
+  subscription_id: string;
+  status: "pending" | "leased" | "succeeded" | "dead" | "cancelled";
+  attempt_count: number;
+  last_attempt_at: string | null;
+  last_http_status: number | null;
+}
+
+export interface EventDeliveryListResponse {
+  data: EventDelivery[];
+  meta: EventPageMeta;
+}
+

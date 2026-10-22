@@ -44,6 +44,10 @@ export interface AppConfig {
   endpointWriteBodyMaxBytes: number;
   bindingWriteBodyMaxBytes: number;
   discoveryBodyMaxBytes: number;
+  policiesEnabled: boolean;
+  policyWriteBodyMaxBytes: number;
+  enforcementEnabled: boolean;
+  eventsEnabled: boolean;
   mcp: McpConfig;
 }
 
@@ -119,6 +123,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (nodeEnv === 'production' && ingressRaw !== 'terminated') {
     throw new ConfigError('production requires FAD_INGRESS_TLS=terminated');
   }
+  if (nodeEnv === 'production' && (env.FAD_EVENTS_TEST_EGRESS || env.FAD_EVENTS_TEST_HOSTS || env.FAD_EVENTS_TEST_PORT || env.FAD_EVENTS_TEST_CA)) {
+    throw new ConfigError('event test egress is not allowed in production');
+  }
   if (nodeEnv !== 'production' && ingressRaw === 'cleartext' && !loopback(bindHost) && !devLoopbackPublish) {
     throw new ConfigError('development cleartext requires a loopback bind or FAD_DEV_LOOPBACK_PUBLISH=true');
   }
@@ -190,6 +197,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     endpointWriteBodyMaxBytes: integer('FAD_ENDPOINT_WRITE_BODY_MAX_BYTES', 4096, 1, 4096, env),
     bindingWriteBodyMaxBytes: integer('FAD_BINDING_WRITE_BODY_MAX_BYTES', 4096, 1, 4096, env),
     discoveryBodyMaxBytes: integer('FAD_DISCOVERY_BODY_MAX_BYTES', 16_384, 1, 16_384, env),
+    policiesEnabled: env.FAD_POLICIES_ENABLED === 'true',
+    policyWriteBodyMaxBytes: integer('FAD_POLICY_WRITE_BODY_MAX_BYTES', 65_536, 1, 65_536, env),
+    enforcementEnabled: env.FAD_ENFORCEMENT_CODE_ENABLED === 'true',
+    eventsEnabled: env.FAD_EVENTS_ENABLED === 'true',
     mcp,
   };
 }

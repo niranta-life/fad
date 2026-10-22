@@ -1,0 +1,19 @@
+{
+  "checked_at": "2026-10-21T22:33:29.425Z",
+  "finished_at": "2026-10-21T22:33:31.724Z",
+  "current_slice5_image_id": "sha256:45fbe99e5656fdac4a3f07b703c356684c6520769bf252708ab70de122f48ba8",
+  "image": "fad-api:slice4",
+  "image_id": "sha256:2b7d3fc26c60b34a04827251d949a0e761c4dd0d58c9117c06643a569384c6ac",
+  "container": "8515178c9f48",
+  "host_port": 60750,
+  "ready_wait_ms": 433,
+  "live": {"status": 200, "request_id": "3a4952e5-c0f8-4fca-ad1b-4dda334f98ba"},
+  "ready": {"status": 200, "request_id": "fdb05d71-6684-4fbc-bf04-5963179dfe50"},
+  "current": {"status": 401, "error": "UNAUTHORIZED", "request_id": "f00fefc1-1791-47f5-a6c0-8cb8a13117ff"},
+  "policies": {"status": 404, "error": "NOT_FOUND", "request_id": "5f9c4473-bd1c-4c3f-8f15-901df69cb6b1"},
+  "tables_kept": {
+    "policies": "fad_policies",
+    "decision_rows": 192
+  },
+  "down_migration": "not run"
+}

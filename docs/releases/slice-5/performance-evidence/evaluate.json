@@ -1,0 +1,19 @@
+{
+  "measured_at": "2026-10-21T21:53:28.896Z",
+  "image": "fad-api:slice5",
+  "flag": "FAD_POLICIES_ENABLED=true",
+  "endpoint": "POST /v1/authorization/evaluate",
+  "samples": 40,
+  "statuses": [200],
+  "decisions": ["allow"],
+  "enforcements": ["not_enforced"],
+  "min_ms": 2.43,
+  "p50_ms": 3.17,
+  "p95_ms": 4.33,
+  "max_ms": 8.92,
+  "target_p95_ms": 100,
+  "target_met_for_this_sample": true,
+  "first_request_id": "b2b8c3d4-38a4-4def-92cd-ca492b6a49b0",
+  "last_request_id": "22a473b8-afd7-4e29-834f-c99e177e6d38",
+  "setup_request_id": "8993eece-a4d5-4797-ade6-d5c416edd70d"
+}

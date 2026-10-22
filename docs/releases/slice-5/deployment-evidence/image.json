@@ -1,0 +1,24 @@
+{
+  "inspected_at": "2026-10-21T22:24:34.833Z",
+  "name": "fad-api:slice5",
+  "id": "sha256:45fbe99e5656fdac4a3f07b703c356684c6520769bf252708ab70de122f48ba8",
+  "repo_digest": "fad-api@sha256:45fbe99e5656fdac4a3f07b703c356684c6520769bf252708ab70de122f48ba8",
+  "user": "node",
+  "os": "linux",
+  "architecture": "arm64",
+  "created": "2026-10-21T15:23:24.765703152-07:00",
+  "env": {
+    "NODE_ENV": "production",
+    "PORT": "8080",
+    "HOME": "/tmp",
+    "FAD_POLICIES_ENABLED": "false"
+  },
+  "cmd": ["node", "apps/api/dist/server.js"],
+  "policy_dist": {
+    "assertReferencedScalars": true,
+    "toLowerCase": true,
+    "isStrictScalar": true,
+    "tagValueFunction": false,
+    "rawTagValue": true
+  }
+}

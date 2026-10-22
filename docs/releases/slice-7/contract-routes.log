@@ -1,0 +1,7 @@
+2026-10-22T20:20:14.789Z CONTRACT-ROUTES ok=true breaking=0
+added_operations=post /v1/tag-definitions,get /v1/tag-definitions,get /v1/tag-definitions/{namespace}/{key},get /v1/agents/{agentId}/tags,get /v1/agents/{agentId}/tags/{namespace}/{key},put /v1/agents/{agentId}/tags/{namespace}/{key},delete /v1/agents/{agentId}/tags/{namespace}/{key},post /v1/agents/search
+event_routes=get /v1/events,get /v1/events/{eventId},post /v1/event-subscriptions,get /v1/event-subscriptions,get /v1/event-subscriptions/{subscriptionId},patch /v1/event-subscriptions/{subscriptionId},post /v1/event-subscriptions/{subscriptionId}/rotate-secret,post /v1/event-subscriptions/{subscriptionId}/replays,get /v1/event-subscriptions/{subscriptionId}/replays/{replayId},get /v1/event-subscriptions/{subscriptionId}/deliveries
+event_routes_in_parent_new=true
+event_routes_inside_added_operations=0
+parent_new_operations_are_slice7_routes=true
+parent_preexisting_deep_equal=true

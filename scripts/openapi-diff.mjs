@@ -40,6 +40,33 @@ const MCP_OPERATIONS = [
   ['delete', '/mcp'],
   ['get', '/.well-known/oauth-protected-resource/mcp'],
 ];
+const POLICY_OPERATIONS = [
+  ['post', '/v1/policies'],
+  ['get', '/v1/policies'],
+  ['get', '/v1/policies/{policyId}'],
+  ['put', '/v1/policies/{policyId}'],
+  ['post', '/v1/policies/{policyId}/activate'],
+  ['post', '/v1/policies/{policyId}/disable'],
+  ['post', '/v1/authorization/evaluate'],
+];
+const ENFORCEMENT_OPERATIONS = [
+  ['get', '/v1/enforcement/config'],
+  ['put', '/v1/enforcement/config'],
+  ['post', '/v1/enforcement/preflight'],
+  ['get', '/v1/enforcement/decisions/{decisionId}'],
+];
+const EVENT_OPERATIONS = [
+  ['get', '/v1/events'],
+  ['get', '/v1/events/{eventId}'],
+  ['post', '/v1/event-subscriptions'],
+  ['get', '/v1/event-subscriptions'],
+  ['get', '/v1/event-subscriptions/{subscriptionId}'],
+  ['patch', '/v1/event-subscriptions/{subscriptionId}'],
+  ['post', '/v1/event-subscriptions/{subscriptionId}/rotate-secret'],
+  ['post', '/v1/event-subscriptions/{subscriptionId}/replays'],
+  ['get', '/v1/event-subscriptions/{subscriptionId}/replays/{replayId}'],
+  ['get', '/v1/event-subscriptions/{subscriptionId}/deliveries'],
+];
 const TAG_OPERATIONS = [
   ['post', '/v1/tag-definitions'],
   ['get', '/v1/tag-definitions'],
@@ -167,9 +194,12 @@ for (const path of Object.keys(published.doc.paths ?? {}).sort()) {
 const expectedNew = TAG_OPERATIONS.map(([method, path]) => `${method} ${path}`).sort();
 const expectedSlice3 = SLICE3_OPERATIONS.map(([method, path]) => `${method} ${path}`).sort();
 const expectedSlice4 = [...expectedSlice3, ...MCP_OPERATIONS.map(([method, path]) => `${method} ${path}`)].sort();
+const expectedSlice5 = [...expectedSlice4, ...POLICY_OPERATIONS.map(([method, path]) => `${method} ${path}`)].sort();
+const expectedSlice6 = [...expectedSlice5, ...ENFORCEMENT_OPERATIONS.map(([method, path]) => `${method} ${path}`)].sort();
+const expectedSlice7 = [...expectedSlice6, ...EVENT_OPERATIONS.map(([method, path]) => `${method} ${path}`)].sort();
 const parentNewSorted = [...parentNew].sort();
-if (!same(parentNewSorted, expectedSlice4)) {
-  breaking.push(`parent new operations are not exactly the slice 3 and MCP routes: ${parentNew.join(', ')}`);
+if (!same(parentNewSorted, expectedSlice7)) {
+  breaking.push(`parent new operations are not exactly the slice 3, MCP, policy, enforcement, and event routes: ${parentNew.join(', ')}`);
 }
 const slice3Present = [];
 for (const [method, path] of SLICE3_OPERATIONS) {
@@ -208,6 +238,7 @@ const report = {
   parent_new_operations: parentNewSorted,
   parent_new_operations_are_only_tag_routes: same(parentNewSorted, expectedNew),
   parent_new_operations_are_only_slice3_routes: same(parentNewSorted, expectedSlice3),
+  parent_new_operations_are_slice7_routes: same(parentNewSorted, expectedSlice7),
   document_changes: documentChanges,
   preserved_operations: preserved,
   slice1_operations: slice1Present,

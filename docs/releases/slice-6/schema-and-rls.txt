@@ -1,0 +1,70 @@
+# Catalog of database fad on container fad-s0-pg.
+# Query time 2026-10-22T03:29:38Z. Command: docker exec fad-s0-pg psql -U postgres -d fad.
+# The down migration was not applied. Fresh-database proof is MIG-FRESH in test-results/npm-test.log.
+# Checksum 20261021_006_policy_enforcement matches journey note R13.
+
+0001_foundation 09fb08e50ca20f3c1f18a32e93c03260f476c52816a976e1754a8b34505dc463
+0002_rate_limit 2b8f86066af0b29968268db39ca3dd297677321339b947d46e46613f68811924
+20261020_001_agents 96ad57d503b52926c3f83c90b66dbb37a6462bfeb4b1959a495e47a7508ffe12
+20261020_002_principal_lock 93a7a7f269ffe076cce814b9157209d3efee11d3f7efa5b791e6d25891118db9
+20261021_001_typed_tags 0d167c6c212b2487afa8c1ba6ad0b0a0cf873c1b2dc1297bd1f5c7b8d9d7d45c
+20261021_005_policy_evaluation ad2885a9e1f7b77c679383f8f4cca1294da4b2076ffba0aee8c97cef4a49f120
+20261021_006_policy_enforcement ee3a5731d8d5723de0062287baef0bf37c3346092d9280ebb8693c91642951f1
+20261022_001_capabilities_discovery 318417c2914327049cf6a5700d190174bace51d9866c0a4f0f19f3fe24cff1e6
+20261023_001_mcp_identity_bindings 61f9d03c1bee2fbac1f97d6d845467b3f58667fae5957ac8fb71c2207ecbeec5
+
+# relations
+             relname              | rls | force 
+----------------------------------+-----+-------
+ agents                           | t   | t
+ fad_enforcement_config_revisions | t   | t
+ fad_enforcement_configs          | t   | t
+ fad_enforcement_decisions        | t   | t
+ fad_enforcement_preflights       | t   | t
+(5 rows)
+
+# policies
+               rel                |            polname            | polpermissive | polcmd 
+----------------------------------+-------------------------------+---------------+--------
+ agents                           | fad_s6_agent_pep_generation   | f             | *
+ fad_enforcement_config_revisions | fad_s6_config_revision_tenant | t             | *
+ fad_enforcement_configs          | fad_s6_config_tenant          | t             | *
+ fad_enforcement_decisions        | fad_s6_decision_tenant        | t             | *
+ fad_enforcement_preflights       | fad_s6_preflight_tenant       | t             | *
+(5 rows)
+
+# table grants for fad_app
+            table_name            | privilege_type 
+----------------------------------+----------------
+ fad_enforcement_config_revisions | INSERT
+ fad_enforcement_config_revisions | SELECT
+ fad_enforcement_configs          | INSERT
+ fad_enforcement_configs          | SELECT
+ fad_enforcement_configs          | UPDATE
+ fad_enforcement_decisions        | INSERT
+ fad_enforcement_decisions        | SELECT
+ fad_enforcement_preflights       | INSERT
+ fad_enforcement_preflights       | SELECT
+(9 rows)
+
+# update column grants for fad_app
+         table_name         |   column_name   
+----------------------------+-----------------
+ fad_enforcement_configs    | actions
+ fad_enforcement_configs    | created_at
+ fad_enforcement_configs    | mode
+ fad_enforcement_configs    | organization_id
+ fad_enforcement_configs    | revision
+ fad_enforcement_configs    | updated_at
+ fad_enforcement_configs    | updated_by
+ fad_enforcement_preflights | used_at
+(8 rows)
+
+# roles
+    rolname    | rolsuper | rolbypassrls 
+---------------+----------+--------------
+ fad_app       | f        | f
+ fad_bootstrap | f        | t
+ fad_migrator  | f        | f
+(3 rows)
+

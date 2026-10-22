@@ -6,7 +6,7 @@ The directory binds every API key to one organization, registers that organizati
 
 Each agent has a stable id, a global URN of the form `urn:fad:agent:<organization-uuid>:<agent-uuid>`, and a revision. A real change writes an audit row, and one organization cannot read or change another organization's agents. The directory stores the record. The agent process does the work, and another system decides whether to call the agent.
 
-The repository contains a Node.js HTTP API, a PostgreSQL 16 database, the offline program `fad-admin`, the client `@fad/sdk` 0.4.0, the optional client `@fad/mcp-client` 0.1.0, and a container image with a local Docker Compose stack. The HTTP contract is `contracts/openapi.yaml`, contract version 1.4.0. Every success and error body uses API version `v1`.
+The repository contains a Node.js HTTP API, a PostgreSQL 16 database, the offline program `fad-admin`, the client `@fad/sdk` 0.5.0, the optional client `@fad/mcp-client` 0.2.0, and a container image with a local Docker Compose stack. The HTTP contract is `contracts/openapi.yaml`, contract version 1.5.0. Every success and error body uses API version `v1`.
 
 - [Server](#server) is for the administrator who runs the service and issues keys.
 - [Client](#client) is the call reference, with examples.
@@ -165,6 +165,12 @@ Optional `--expires-at` takes a future timestamp. If you omit it, the key stays 
 | `capabilities:write` | The administrator who publishes or binds a capability | Publish an immutable capability version, and bind or remove that binding |
 | `endpoints:read` | A program that reads endpoint metadata or discovers agents | Read declared endpoints |
 | `endpoints:write` | The deploy job that declares where an agent is reached | Create, update, disable, or remove an endpoint declaration |
+| `policies:read` | A program that lists policy drafts | Read policies that do not select a restricted tag |
+| `policies:write` | The administrator who drafts a policy | Create or replace a draft policy |
+| `policies:activate` | The administrator who publishes a policy | Activate a draft or disable an active policy. Also requires `policies:write` |
+| `policies:evaluate:self` | A service that checks its own subject | Evaluate access for the calling principal |
+| `policies:evaluate:any` | An operator tool that checks another subject | Evaluate access for any principal in the organization. Also requires `agents:read` |
+| `policies:explain` | An auditor | Receive decision digests and matched policy ids when restricted selectors are also visible |
 
 A key that already exists does not gain a scope you add to the product later. Issue a new key when a program needs another name from this table. A registrar key needs `organizations:read` and `agents:write`. A running agent that loads its record and lists peers needs `agents:read`. Keep `agents:lifecycle` on the operator tool, because suspending, activating, and retiring are administrator actions. Publishing or binding a capability needs `capabilities:write`, declaring an endpoint needs `endpoints:write`, and discovering agents needs `agents:read`, `capabilities:read`, and `endpoints:read`.
 
@@ -197,7 +203,7 @@ List with `GET /v1/agents`. The optional query fields are `status` (`active`, `s
 
 The default limit is 60 authenticated requests per key per 60 seconds. A limited call returns status 429 and `Retry-After`. Change the ceiling with `FAD_RATE_LIMIT_MAX` and `FAD_RATE_LIMIT_WINDOW_SECONDS`. `FAD_RATE_LIMIT_BACKEND` stays `postgres`.
 
-Tags, Slice 3, and MCP stay off until the matching value is the exact string `true`. The configuration command writes that string when you set `tags`, `slice3`, or `mcp` to `on`. Run the migration job before you enable a flag. To roll back, set the flag to `false`, or deploy the previous API image, and leave the new tables in place.
+Tags, Slice 3, MCP, and policies stay off until the matching value is the exact string `true`. The configuration command writes that string when you set `tags`, `slice3`, `mcp`, or `policies` to `on`. Run the migration job before you enable a flag. To roll back, set the flag to `false`, or deploy the previous API image, and leave the new tables in place.
 
 ### Typed tags
 
@@ -237,6 +243,14 @@ npm run fad-admin -- mcp disable --binding-id <binding-uuid>
 ```
 
 If the flag is on and the issuer settings are absent or incomplete, the process stays up, `/health/live` stays ok, and `/health/ready` and `/mcp` answer 503. Do not drop `mcp_principal_bindings` when you roll back. The optional client is `@fad/mcp-client`. `@fad/sdk` keeps its arguments and results.
+
+### Policy evaluation
+
+While `FAD_POLICIES_ENABLED` is not `true`, `/v1/policies` and `/v1/authorization/evaluate` answer 404. Existing routes stay the same. An evaluation is a recorded hypothesis. `enforcement` is always `not_enforced`. An allow does not call an agent and does not change any other route.
+
+Create a draft with `policies:write`, an idempotency key, and a definition. The first ETag is `"policy-v1"`. Replace a draft with `PUT`, `If-Match`, and a new idempotency key. Activate or disable with `policies:write`, `policies:activate`, `If-Match`, and an idempotency key. A draft cannot be disabled. A disabled policy stays disabled. An active definition does not change.
+
+`POST /v1/authorization/evaluate` needs `agents:read` and either `policies:evaluate:self` or `policies:evaluate:any`. The server reads the agent, the subject, and the tags. A caller cannot supply those values. No matching allow is a deny. A matching deny overrides a matching allow. A policy that selects a restricted tag is hidden without `tags:restricted:read`. The client methods are `policies` and `authorization.evaluate`. Evaluation is not retried.
 
 ### Rotate a key and stop a caller
 
@@ -281,7 +295,7 @@ The package builds for ESM and CommonJS and requires Node.js 22 or later. From a
 
 ```sh
 npm pack -w @fad/sdk
-npm install /path/to/fad-sdk-0.4.0.tgz
+npm install /path/to/fad-sdk-0.5.0.tgz
 ```
 
 Create one client for the life of the process. Pass the key through a function so a rotated secret is picked up on the next call. Use `credentialProvider` when you prefer that name. When both are set, `apiKey` is the one that is called.

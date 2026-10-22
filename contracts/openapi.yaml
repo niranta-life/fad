@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Federated Agent Directory API
-  version: 1.4.0
+  version: 1.5.0
   description: |
     Normative public HTTP contract. Header authentication with X-FAD-API-Key
     is scoped to a single organization and principal. A supplied
@@ -14,7 +14,14 @@ info:
     Slice 3 operations. A deployment serves those routes only when Slice 3
     is enabled. Discovery does not claim that an agent is healthy, trusted,
     or authorized for invocation. MCP at /mcp is an additive protocol. It
-    does not change /v1.
+    does not change /v1. Policy management and hypothetical evaluation are
+    additive Slice 5 operations. A deployment serves those routes only when
+    policies are enabled. An evaluation result is not enforcement and does
+    not authorize invocation. Enforcement configuration is an additive
+    Slice 6 operation. A deployment serves those routes only when
+    enforcement code is enabled. The default mode is off. Directory change
+    events and webhook subscriptions are additive Slice 7 operations. A
+    deployment serves those routes only when event capture is enabled.
 servers:
   - url: https://fad.example.internal
 security:
@@ -29,6 +36,9 @@ tags:
   - name: Bindings
   - name: Discovery
   - name: MCP
+  - name: Policies
+  - name: PolicyEvaluation
+  - name: Events
 paths:
   /health/live:
     get:
@@ -1068,6 +1078,675 @@ paths:
                   bearer_methods_supported:
                     type: array
                     items: { type: string }
+  /v1/policies:
+    post:
+      tags: [Policies]
+      operationId: createPolicy
+      summary: Create a draft policy; does not enforce or activate it
+      description: |
+        Requires policies:write. Validates referenced same-tenant principals,
+        agents, and tag definitions. A restricted selector requires
+        tags:restricted:read. The draft is not used by evaluation.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PolicyDefinitionInput' }
+      responses:
+        '201':
+          description: Draft created
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+            ETag: { $ref: '#/components/headers/PolicyETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    get:
+      tags: [Policies]
+      operationId: listPolicies
+      summary: List visible policies in the authenticated tenant
+      description: |
+        Requires policies:read. Policies that select a restricted tag are
+        omitted unless the caller also has tags:restricted:read. The page
+        does not report a count of omitted policies.
+      parameters:
+        - $ref: '#/components/parameters/PolicyStatusFilter'
+        - $ref: '#/components/parameters/PolicyLimit'
+        - $ref: '#/components/parameters/PolicyCursor'
+      responses:
+        '200':
+          description: Visible policy page
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/policies/{policyId}:
+    get:
+      tags: [Policies]
+      operationId: getPolicy
+      summary: Get one visible policy
+      description: |
+        Requires policies:read. A restricted policy without
+        tags:restricted:read is the same 404 as a missing policy.
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+      responses:
+        '200':
+          description: Policy
+          headers:
+            ETag: { $ref: '#/components/headers/PolicyETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    put:
+      tags: [Policies]
+      operationId: updateDraftPolicy
+      summary: Replace an entire draft policy with a new immutable revision
+      description: |
+        Requires policies:write, Idempotency-Key, and If-Match. Only a draft
+        can be replaced. The previous revision snapshot stays intact.
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/PolicyIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PolicyDefinitionInput' }
+      responses:
+        '200':
+          description: Draft revision committed
+          headers:
+            ETag: { $ref: '#/components/headers/PolicyETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/policies/{policyId}/activate:
+    post:
+      tags: [Policies]
+      operationId: activatePolicy
+      summary: Activate an immutable draft policy
+      description: |
+        Requires policies:write and policies:activate, a strong If-Match, and
+        Idempotency-Key. Activation does not change authorization of existing
+        REST or MCP operations.
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/PolicyIfMatch'
+      responses:
+        '200':
+          description: Policy activated
+          headers:
+            ETag: { $ref: '#/components/headers/PolicyETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/policies/{policyId}/disable:
+    post:
+      tags: [Policies]
+      operationId: disablePolicy
+      summary: Disable an active policy for later evaluations
+      description: |
+        Requires policies:write and policies:activate. Valid only from active.
+        Disabling does not change previous decision records.
+      parameters:
+        - $ref: '#/components/parameters/PolicyId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/PolicyIfMatch'
+      responses:
+        '200':
+          description: Policy disabled
+          headers:
+            ETag: { $ref: '#/components/headers/PolicyETag' }
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/authorization/evaluate:
+    post:
+      tags: [PolicyEvaluation]
+      operationId: evaluateAgentAccess
+      summary: Evaluate hypothetical agent access; the result is not enforced
+      description: |
+        Requires agents:read and either policies:evaluate:self for the caller's
+        own subject or policies:evaluate:any for another subject. The decision
+        is recorded and returned. It does not invoke an agent and does not
+        change authorization of any existing operation. Caller-supplied tag
+        values and principal state are rejected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EvaluationRequest' }
+      responses:
+        '200':
+          description: Durably recorded evaluation
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EvaluationResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
+
+  /v1/enforcement/config:
+    get:
+      tags: [PolicyEnforcement]
+      operationId: getEnforcementConfig
+      summary: Read own organization enforcement configuration
+      description: |
+        Returns off revision 0 when the organization has no stored configuration.
+        Requires enforcement:read. The tenant and actor come from the verified
+        credential. Request fields do not select either one.
+      responses:
+        '200':
+          description: Current enforcement configuration
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+            ETag: { $ref: '#/components/headers/EnforcementETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnforcementConfigResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    put:
+      tags: [PolicyEnforcement]
+      operationId: setEnforcementConfig
+      summary: Set own organization enforcement configuration
+      description: |
+        Requires a strong If-Match and an Idempotency-Key. Shadow and enforce
+        require a passing single-use preflight. Off is an audited privileged
+        change and does not require a preflight. Requires enforcement:manage.
+      parameters:
+        - { $ref: '#/components/parameters/EnforcementIfMatch' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EnforcementConfigSet' }
+      responses:
+        '200':
+          description: Updated enforcement configuration
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+            ETag: { $ref: '#/components/headers/EnforcementETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnforcementConfigResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/enforcement/preflight:
+    post:
+      tags: [PolicyEnforcement]
+      operationId: preflightEnforcement
+      summary: Preflight a shadow or enforce change
+      description: |
+        Records a short-lived single-use readiness result. It does not change
+        the enforcement mode. Requires enforcement:manage.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EnforcementPreflightRequest' }
+      responses:
+        '200':
+          description: Preflight result
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnforcementPreflightResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '415': { $ref: '#/components/responses/UnsupportedMediaType' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/enforcement/decisions/{decisionId}:
+    get:
+      tags: [PolicyEnforcement]
+      operationId: getEnforcementDecision
+      summary: Read one enforcement decision
+      description: |
+        Returns one decision recorded for this organization. A decision from
+        another organization is indistinguishable from a missing decision.
+        Requires enforcement:audit. The record omits policy text and tag values.
+      parameters:
+        - { $ref: '#/components/parameters/EnforcementDecisionId' }
+      responses:
+        '200':
+          description: Enforcement decision
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnforcementDecisionResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/events:
+    get:
+      tags: [Events]
+      operationId: listEvents
+      summary: List directory change events
+      description: |
+        Requires events:read. Visibility is applied before the page. A caller
+        without events:restricted:read does not receive restricted events or
+        a count of them. fadsequence is omitted unless events:restricted:read
+        is present.
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/DirectoryEventType' }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 4096 }
+      responses:
+        '200':
+          description: Visible events
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/events/{eventId}:
+    get:
+      tags: [Events]
+      operationId: getEvent
+      summary: Read one directory change event
+      description: |
+        Requires events:read. A hidden or foreign event is 404. A visible type
+        the caller cannot read is 403.
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: One CloudEvent
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/event-subscriptions:
+    post:
+      tags: [Events]
+      operationId: createEventSubscription
+      summary: Create a webhook subscription
+      description: |
+        Requires events:subscribe and Idempotency-Key. The subscription stays
+        pending_verification until the HTTPS challenge succeeds. The signing
+        secret is returned only on this response and on the same keyed retry.
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventSubscriptionCreate' }
+      responses:
+        '201':
+          description: Subscription created
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+            ETag: { $ref: '#/components/headers/SubscriptionETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventSubscriptionCreateResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    get:
+      tags: [Events]
+      operationId: listEventSubscriptions
+      summary: List webhook subscriptions
+      description: Requires events:subscribe or events:manage. Signing secrets are omitted.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 4096 }
+      responses:
+        '200':
+          description: Subscription page
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventSubscriptionListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/event-subscriptions/{subscriptionId}:
+    get:
+      tags: [Events]
+      operationId: getEventSubscription
+      summary: Read one webhook subscription
+      description: The signing secret is not returned.
+      parameters:
+        - name: subscriptionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Subscription
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+            ETag: { $ref: '#/components/headers/SubscriptionETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventSubscriptionResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+    patch:
+      tags: [Events]
+      operationId: updateEventSubscription
+      summary: Pause, resume, or disable a subscription
+      description: Requires If-Match and Idempotency-Key. pending_verification cannot be patched.
+      parameters:
+        - name: subscriptionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventSubscriptionPatch' }
+      responses:
+        '200':
+          description: Updated subscription
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+            ETag: { $ref: '#/components/headers/SubscriptionETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventSubscriptionResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/event-subscriptions/{subscriptionId}/rotate-secret:
+    post:
+      tags: [Events]
+      operationId: rotateEventSubscriptionSecret
+      summary: Rotate a webhook signing secret
+      description: Requires If-Match and Idempotency-Key. The new secret is returned once.
+      parameters:
+        - name: subscriptionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+        - { $ref: '#/components/parameters/IfMatch' }
+      responses:
+        '200':
+          description: Rotated secret
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+            ETag: { $ref: '#/components/headers/SubscriptionETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventSubscriptionRotateResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/event-subscriptions/{subscriptionId}/replays:
+    post:
+      tags: [Events]
+      operationId: replayEvents
+      summary: Replay retained events
+      description: |
+        Requires events:replay, events:read, and events:restricted:read.
+        Reuses retained CloudEvent ids and creates no new outbox row.
+      parameters:
+        - name: subscriptionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventReplayCreate' }
+      responses:
+        '201':
+          description: Replay accepted
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventReplayResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/event-subscriptions/{subscriptionId}/replays/{replayId}:
+    get:
+      tags: [Events]
+      operationId: getEventReplay
+      summary: Read one replay
+      parameters:
+        - name: subscriptionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: replayId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Replay status
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventReplayResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+  /v1/event-subscriptions/{subscriptionId}/deliveries:
+    get:
+      tags: [Events]
+      operationId: listEventDeliveries
+      summary: List webhook deliveries
+      description: Requires events:delivery:read.
+      parameters:
+        - name: subscriptionId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 4096 }
+      responses:
+        '200':
+          description: Delivery page
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/RequestId' }
+            Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventDeliveryListResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/DependencyUnavailable' }
+
 components:
   securitySchemes:
     FadApiKey:
@@ -1198,6 +1877,44 @@ components:
       in: query
       required: false
       schema: { $ref: '#/components/schemas/CapabilityId' }
+    PolicyIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong policy ETag such as "policy-v2". Weak tags and wildcards are rejected.
+      schema: { type: string, pattern: '^"policy-v[1-9][0-9]*"$' }
+    PolicyId:
+      name: policyId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PolicyStatusFilter:
+      name: status
+      in: query
+      required: false
+      schema: { $ref: '#/components/schemas/PolicyStatus' }
+    PolicyLimit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    PolicyCursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, minLength: 1, maxLength: 4096 }
+    EnforcementIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong enforcement ETag such as "enforcement-v0". Weak tags and wildcards are rejected.
+      schema: { type: string, pattern: '^"enforcement-v(0|[1-9][0-9]*)"$' }
+    EnforcementDecisionId:
+      name: decisionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
   headers:
     RequestId:
       description: Unique server-generated request correlation UUID.
@@ -1208,6 +1925,9 @@ components:
     NoStore:
       description: Health response caching is prohibited.
       schema: { type: string, const: no-store }
+    SubscriptionETag:
+      description: Strong ETag for one webhook subscription
+      schema: { type: string, pattern: '^"subscription-v[1-9][0-9]*"$' }
     RetryAfter:
       description: Whole number of seconds to wait before retry.
       schema: { type: integer, minimum: 1 }
@@ -1235,6 +1955,12 @@ components:
     EndpointETag:
       description: Strong ETag for an endpoint. It does not change the agent ETag.
       schema: { type: string, pattern: '^"endpoint-v[1-9][0-9]*"$' }
+    PolicyETag:
+      description: Strong ETag for this policy representation. It does not change an agent ETag.
+      schema: { type: string, pattern: '^"policy-v[1-9][0-9]*"$' }
+    EnforcementETag:
+      description: Strong ETag for the enforcement configuration. It does not change an agent ETag.
+      schema: { type: string, pattern: '^"enforcement-v(0|[1-9][0-9]*)"$' }
   schemas:
     Liveness:
       type: object
@@ -1725,6 +2451,547 @@ components:
           type: array
           items: { $ref: '#/components/schemas/DiscoveryMatch' }
         meta: { $ref: '#/components/schemas/PageMeta' }
+    PolicyAction:
+      type: string
+      enum: [agent.read, agent.discover, agent.invoke, agent.update, agent.suspend]
+    PolicyEffect:
+      type: string
+      enum: [allow, deny]
+    PolicyStatus:
+      type: string
+      enum: [draft, active, disabled]
+    PolicyTagPredicate:
+      type: object
+      additionalProperties: false
+      required: [namespace, key, operator, value]
+      properties:
+        namespace: { type: string, pattern: '^[a-z][a-z0-9_-]{0,39}$' }
+        key: { type: string, pattern: '^[a-z][a-z0-9_-]{0,39}$' }
+        operator: { type: string, const: eq }
+        value:
+          oneOf:
+            - { type: string, minLength: 1, maxLength: 128 }
+            - { type: integer, minimum: -1000000000, maximum: 1000000000 }
+            - { type: boolean }
+    PolicySubjects:
+      type: object
+      additionalProperties: false
+      required: [principal_ids]
+      properties:
+        principal_ids:
+          type: array
+          minItems: 1
+          maxItems: 64
+          uniqueItems: true
+          items: { type: string, format: uuid }
+    PolicyResourceSelector:
+      type: object
+      additionalProperties: false
+      required: [type]
+      anyOf:
+        - { required: [agent_ids] }
+        - { required: [tags_all] }
+      properties:
+        type: { const: agent }
+        agent_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        tags_all:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items: { $ref: '#/components/schemas/PolicyTagPredicate' }
+    PolicyDefinitionInput:
+      type: object
+      additionalProperties: false
+      required: [name, effect, actions, subjects, resource]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 160 }
+        description: { type: string, maxLength: 2000, default: '' }
+        effect: { $ref: '#/components/schemas/PolicyEffect' }
+        actions:
+          type: array
+          minItems: 1
+          maxItems: 5
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/PolicyAction' }
+        subjects: { $ref: '#/components/schemas/PolicySubjects' }
+        resource: { $ref: '#/components/schemas/PolicyResourceSelector' }
+        supersedes_policy_id:
+          oneOf:
+            - { type: string, format: uuid }
+            - { type: 'null' }
+          description: Optional same-tenant policy id. It does not disable that policy.
+    Policy:
+      type: object
+      additionalProperties: false
+      required: [id, organization_id, name, description, effect, actions, subjects, resource, status, revision, contains_restricted_tags, supersedes_policy_id, created_at, updated_at, activated_at, disabled_at, created_by, updated_by]
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        effect: { $ref: '#/components/schemas/PolicyEffect' }
+        actions:
+          type: array
+          items: { $ref: '#/components/schemas/PolicyAction' }
+        subjects: { $ref: '#/components/schemas/PolicySubjects' }
+        resource: { $ref: '#/components/schemas/PolicyResourceSelector' }
+        status: { $ref: '#/components/schemas/PolicyStatus' }
+        revision: { type: integer, minimum: 1 }
+        contains_restricted_tags: { type: boolean }
+        supersedes_policy_id:
+          oneOf:
+            - { type: string, format: uuid }
+            - { type: 'null' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        activated_at:
+          oneOf:
+            - { type: string, format: date-time }
+            - { type: 'null' }
+        disabled_at:
+          oneOf:
+            - { type: string, format: date-time }
+            - { type: 'null' }
+        created_by: { type: string, format: uuid }
+        updated_by: { type: string, format: uuid }
+    PolicyResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/Policy' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    PolicyPage:
+      type: object
+      additionalProperties: false
+      required: [next_cursor]
+      properties:
+        next_cursor:
+          type: [string, 'null']
+    PolicyListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, page, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Policy' }
+        page: { $ref: '#/components/schemas/PolicyPage' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    EvaluationSubject:
+      type: object
+      additionalProperties: false
+      required: [principal_id]
+      properties:
+        principal_id: { type: string, format: uuid }
+    EvaluationResource:
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type: { const: agent }
+        id: { type: string, format: uuid }
+    EvaluationContext:
+      type: object
+      additionalProperties: false
+      description: Correlation metadata only. It is not a policy input.
+      properties:
+        purpose: { type: string, minLength: 1, maxLength: 100 }
+        correlation_id: { type: string, minLength: 1, maxLength: 128 }
+    EvaluationRequest:
+      type: object
+      additionalProperties: false
+      required: [subject, action, resource]
+      properties:
+        subject: { $ref: '#/components/schemas/EvaluationSubject' }
+        action: { $ref: '#/components/schemas/PolicyAction' }
+        resource: { $ref: '#/components/schemas/EvaluationResource' }
+        context: { $ref: '#/components/schemas/EvaluationContext' }
+    PolicyMatch:
+      type: object
+      additionalProperties: false
+      required: [policy_id, revision, effect]
+      properties:
+        policy_id: { type: string, format: uuid }
+        revision: { type: integer, minimum: 1 }
+        effect: { $ref: '#/components/schemas/PolicyEffect' }
+    EvaluationDecision:
+      type: object
+      additionalProperties: false
+      required: [decision_id, decision, reason_code, enforcement, evaluated_at, resource_revision]
+      properties:
+        decision_id: { type: string, format: uuid }
+        decision: { type: string, enum: [allow, deny] }
+        reason_code:
+          type: string
+          enum: [EXPLICIT_ALLOW, EXPLICIT_DENY, NO_MATCHING_ALLOW, SUBJECT_INACTIVE, RESOURCE_INACTIVE]
+        enforcement: { const: not_enforced }
+        evaluated_at: { type: string, format: date-time }
+        resource_revision: { type: integer, minimum: 1 }
+        policy_set_digest:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Omitted unless the caller may explain every considered policy.
+        input_digest:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Omitted unless the caller may explain every considered policy.
+        matched_policy_count:
+          type: integer
+          minimum: 0
+          description: Omitted rather than reveal a restricted match to a low-privilege caller.
+        explanation:
+          type: array
+          description: Omitted unless the caller has policies:explain and may read every restricted selector.
+          items: { $ref: '#/components/schemas/PolicyMatch' }
+    EvaluationResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/EvaluationDecision' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    EnforcementMode:
+      type: string
+      enum: ['off', shadow, enforce]
+    EnforcementTargetMode:
+      type: string
+      enum: [shadow, enforce]
+    EnforcementAction:
+      type: string
+      enum: [agent.read, agent.discover, agent.update, agent.suspend]
+    EnforcementActions:
+      type: array
+      minItems: 0
+      maxItems: 4
+      uniqueItems: true
+      items: { $ref: '#/components/schemas/EnforcementAction' }
+    EnforcementActiveActions:
+      type: array
+      minItems: 1
+      maxItems: 4
+      uniqueItems: true
+      items: { $ref: '#/components/schemas/EnforcementAction' }
+    EnforcementConfig:
+      type: object
+      additionalProperties: false
+      required: [organization_id, mode, actions, revision, updated_by, updated_at]
+      properties:
+        organization_id: { type: string, format: uuid }
+        mode: { $ref: '#/components/schemas/EnforcementMode' }
+        actions: { $ref: '#/components/schemas/EnforcementActions' }
+        revision: { type: integer, minimum: 0 }
+        updated_by:
+          oneOf:
+            - { type: string, format: uuid }
+            - { type: 'null' }
+        updated_at:
+          oneOf:
+            - { type: string, format: date-time }
+            - { type: 'null' }
+    EnforcementConfigResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/EnforcementConfig' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    EnforcementPreflightRequest:
+      type: object
+      additionalProperties: false
+      required: [mode, actions, reason]
+      properties:
+        mode: { $ref: '#/components/schemas/EnforcementTargetMode' }
+        actions: { $ref: '#/components/schemas/EnforcementActiveActions' }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+    EnforcementPreflight:
+      type: object
+      additionalProperties: false
+      required: [preflight_id, mode, actions, passes, blockers, warnings, policy_snapshot_digest, expires_at]
+      properties:
+        preflight_id: { type: string, format: uuid }
+        mode: { $ref: '#/components/schemas/EnforcementTargetMode' }
+        actions: { $ref: '#/components/schemas/EnforcementActiveActions' }
+        passes: { type: boolean }
+        blockers:
+          type: array
+          maxItems: 100
+          items: { type: string, maxLength: 100 }
+        warnings:
+          type: array
+          maxItems: 100
+          items: { type: string, maxLength: 100 }
+        policy_snapshot_digest: { type: string, pattern: '^[0-9a-f]{64}$' }
+        expires_at: { type: string, format: date-time }
+    EnforcementPreflightResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/EnforcementPreflight' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    EnforcementConfigSet:
+      type: object
+      additionalProperties: false
+      required: [mode, actions, reason, acknowledge_default_deny]
+      properties:
+        mode: { $ref: '#/components/schemas/EnforcementMode' }
+        actions: { $ref: '#/components/schemas/EnforcementActions' }
+        reason: { type: string, minLength: 3, maxLength: 500 }
+        preflight_id: { type: string, format: uuid }
+        acknowledge_default_deny: { type: boolean }
+      allOf:
+        - if:
+            properties:
+              mode: { const: 'off' }
+            required: [mode]
+          then:
+            properties:
+              actions: { type: array, maxItems: 0 }
+            not:
+              required: [preflight_id]
+        - if:
+            properties:
+              mode: { const: shadow }
+            required: [mode]
+          then:
+            required: [preflight_id]
+            properties:
+              actions: { $ref: '#/components/schemas/EnforcementActiveActions' }
+        - if:
+            properties:
+              mode: { const: enforce }
+            required: [mode]
+          then:
+            required: [preflight_id]
+            properties:
+              actions: { $ref: '#/components/schemas/EnforcementActiveActions' }
+              acknowledge_default_deny: { const: true }
+    EnforcementDecision:
+      type: object
+      additionalProperties: false
+      required: [id, request_id, agent_id, actor_principal_id, operation_id, action, channel, mode, outcome, reason_code, policy_decision_id, happened_at]
+      properties:
+        id: { type: string, format: uuid }
+        request_id: { type: string, format: uuid }
+        agent_id: { type: string, format: uuid }
+        actor_principal_id: { type: string, format: uuid }
+        operation_id: { type: string, minLength: 1, maxLength: 96 }
+        action: { $ref: '#/components/schemas/EnforcementAction' }
+        channel: { type: string, enum: [rest, mcp] }
+        mode: { $ref: '#/components/schemas/EnforcementTargetMode' }
+        outcome: { type: string, enum: [allowed, denied, would_allow, would_deny] }
+        reason_code: { type: string, minLength: 1, maxLength: 80 }
+        policy_decision_id:
+          oneOf:
+            - { type: string, format: uuid }
+            - { type: 'null' }
+        happened_at: { type: string, format: date-time }
+    EnforcementDecisionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/EnforcementDecision' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    DirectoryEventType:
+      type: string
+      enum:
+        - com.fad.agent.registered.v1
+        - com.fad.agent.updated.v1
+        - com.fad.agent.lifecycle_changed.v1
+        - com.fad.tag.definition_created.v1
+        - com.fad.tag.assignment_changed.v1
+        - com.fad.capability.published.v1
+        - com.fad.agent.endpoint_changed.v1
+        - com.fad.agent.capability_binding_changed.v1
+        - com.fad.policy.lifecycle_changed.v1
+        - com.fad.enforcement.config_changed.v1
+    CloudEventData:
+      type: object
+      additionalProperties: false
+      properties:
+        agent_id: { type: string, format: uuid }
+        revision: { type: integer, minimum: 1 }
+        status: { type: string, minLength: 1, maxLength: 32 }
+        namespace: { type: string, minLength: 1, maxLength: 64 }
+        key: { type: string, minLength: 1, maxLength: 64 }
+        change: { type: string, enum: [assigned, removed, upserted, deleted] }
+        capability_id: { type: string, minLength: 1, maxLength: 128 }
+        version: { type: string, minLength: 1, maxLength: 64 }
+        endpoint_key: { type: string, minLength: 1, maxLength: 64 }
+        policy_id: { type: string, format: uuid }
+        mode: { type: string, enum: [off, shadow, enforce] }
+    CloudEvent:
+      type: object
+      additionalProperties: false
+      required: [specversion, id, source, type, subject, time, datacontenttype, data]
+      properties:
+        specversion: { type: string, const: '1.0' }
+        id: { type: string, format: uuid }
+        source: { type: string, minLength: 1, maxLength: 256 }
+        type: { $ref: '#/components/schemas/DirectoryEventType' }
+        subject: { type: string, minLength: 1, maxLength: 256 }
+        time: { type: string, format: date-time }
+        datacontenttype: { type: string, const: application/json }
+        data: { $ref: '#/components/schemas/CloudEventData' }
+        fadsequence: { type: integer, minimum: 1 }
+    EventPageMeta:
+      type: object
+      additionalProperties: false
+      required: [request_id, api_version, limit, next_cursor, has_more]
+      properties:
+        request_id: { type: string, format: uuid }
+        api_version: { type: string, const: v1 }
+        limit: { type: integer, minimum: 1, maximum: 100 }
+        next_cursor: { type: [string, 'null'] }
+        has_more: { type: boolean }
+    EventListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/CloudEvent' }
+        meta: { $ref: '#/components/schemas/EventPageMeta' }
+    EventResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/CloudEvent' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    EventSubscription:
+      type: object
+      additionalProperties: false
+      required: [id, callback_url, description, event_types, status, revision, verified_at, start_after_sequence, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        callback_url: { type: string, minLength: 12, maxLength: 2048 }
+        description: { type: string, maxLength: 256 }
+        event_types:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: '#/components/schemas/DirectoryEventType' }
+        status: { type: string, enum: [pending_verification, active, paused, disabled] }
+        revision: { type: integer, minimum: 1 }
+        verified_at: { type: [string, 'null'], format: date-time }
+        start_after_sequence: { type: [integer, 'null'], minimum: 0 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    EventSubscriptionCreate:
+      type: object
+      additionalProperties: false
+      required: [callback_url, event_types]
+      properties:
+        callback_url: { type: string, minLength: 12, maxLength: 2048 }
+        description: { type: string, maxLength: 256 }
+        event_types:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: '#/components/schemas/DirectoryEventType' }
+    EventSubscriptionPatch:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, enum: [active, paused, disabled] }
+    EventSubscriptionSecret:
+      type: object
+      additionalProperties: false
+      required: [subscription, signing_secret, signing_key_id]
+      properties:
+        subscription: { $ref: '#/components/schemas/EventSubscription' }
+        signing_secret: { type: string, minLength: 16, maxLength: 256 }
+        signing_key_id: { type: string, format: uuid }
+        overlap_expires_at: { type: string, format: date-time }
+    EventSubscriptionCreateResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/EventSubscriptionSecret' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    EventSubscriptionRotateResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/EventSubscriptionSecret' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    EventSubscriptionResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/EventSubscription' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    EventSubscriptionListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/EventSubscription' }
+        meta: { $ref: '#/components/schemas/EventPageMeta' }
+    EventReplay:
+      type: object
+      additionalProperties: false
+      required: [id, subscription_id, after_sequence, through_sequence, status, created_at, completed_at]
+      properties:
+        id: { type: string, format: uuid }
+        subscription_id: { type: string, format: uuid }
+        after_sequence: { type: integer, minimum: 0 }
+        through_sequence: { type: integer, minimum: 1 }
+        status: { type: string, enum: [queued, running, completed, failed, cancelled] }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: [string, 'null'], format: date-time }
+    EventReplayCreate:
+      type: object
+      additionalProperties: false
+      required: [after_sequence, through_sequence, reason]
+      properties:
+        after_sequence: { type: integer, minimum: 0 }
+        through_sequence: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 1, maxLength: 256 }
+    EventReplayResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/EventReplay' }
+        meta: { $ref: '#/components/schemas/ResponseMeta' }
+    EventDelivery:
+      type: object
+      additionalProperties: false
+      required: [id, event_id, subscription_id, status, attempt_count, last_attempt_at, last_http_status]
+      properties:
+        id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        subscription_id: { type: string, format: uuid }
+        status: { type: string, enum: [pending, leased, succeeded, dead, cancelled] }
+        attempt_count: { type: integer, minimum: 0, maximum: 12 }
+        last_attempt_at: { type: [string, 'null'], format: date-time }
+        last_http_status: { type: [integer, 'null'], minimum: 100, maximum: 599 }
+    EventDeliveryListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/EventDelivery' }
+        meta: { $ref: '#/components/schemas/EventPageMeta' }
+
   responses:
     HealthUnavailable:
       description: Process is not ready to serve traffic
@@ -1931,6 +3198,14 @@ components:
           example:
             error: { code: TAG_DEFINITION_EXISTS, message: The tag definition already exists. }
             meta: { request_id: 3b0fb35b-3c4c-489a-90fa-17232c7b8fda, api_version: v1 }
+    Gone:
+      description: The cursor or replay range is outside retention
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/RequestId' }
+        Cache-Control: { $ref: '#/components/headers/PrivateNoStore' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
     NotFound:
       description: The resource does not exist in the authenticated organization
       headers:

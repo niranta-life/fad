@@ -1,0 +1,2 @@
+2026-10-22T03:19:57.348Z SDK {"surfaces":true,"org":true,"policies":2,"mode0":"off","revision0":0,"shadowPass":true,"shadowMode":"shadow","shadowRead":"a1098c01-c289-4c1d-bb75-9dc429c1e416","enforcement":"not_enforced","enforcePass":true,"blockers":[],"enforceMode":"enforce","allowed":"a1098c01-c289-4c1d-bb75-9dc429c1e416","deniedStatus":404,"deniedCode":"AGENT_NOT_FOUND","off":"off","legacy":"a1098c01-c289-4c1d-bb75-9dc429c1e416","decisionId":""}
+2026-10-22T03:19:58.896Z MCP tools=25 decision=98db2ee8-4790-41e1-82e1-b907edb5e163 replica=64930

@@ -1,6 +1,6 @@
 {
   "name": "@fad/mcp-client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Optional MCP client for the Federated Agent Directory",
   "type": "module",
   "main": "./dist/index.js",

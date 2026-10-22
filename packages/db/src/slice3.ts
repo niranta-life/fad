@@ -1,9 +1,21 @@
 import type { Pool, PoolClient } from 'pg';
 import { hasScope } from '@fad/auth-core';
 import { insertAudit } from './audit.js';
+import { appendDirectoryEvent } from './event-outbox.js';
 import { canonicalJson } from './agent-rules.js';
 import { beginIdempotency, requestFingerprint, writeIdempotency } from './idempotency.js';
 import { validateTagValue, type TagType } from './tag-rules.js';
+import {
+  EnforcementServiceError,
+  authorizeCandidate,
+  beginShared,
+  decodeEnforcementCursor,
+  encodeEnforcementCursor,
+  enforceAgent,
+  enforcementScanLimit,
+  loadEvalContext,
+  type EnforcementCaller,
+} from './enforcement.js';
 import { withTenant } from './tenant.js';
 import {
   Slice3ServiceError,
@@ -34,6 +46,17 @@ export interface Slice3Actor {
   principalId: string;
   requestId: string;
   scopes: readonly string[];
+  channel?: 'rest' | 'mcp';
+}
+
+function sliceCaller(actor: Slice3Actor): EnforcementCaller {
+  return {
+    organizationId: actor.organizationId,
+    principalId: actor.principalId,
+    requestId: actor.requestId,
+    scopes: actor.scopes,
+    channel: actor.channel,
+  };
 }
 
 export interface Slice3Limits {
@@ -479,6 +502,17 @@ export async function publishCapability(
         request_id: actor.requestId,
       },
     });
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.capability.published.v1',
+      subject: `capability/${capability.id}@${capability.version}`,
+      aggregateType: 'capability_version',
+      aggregateId: null,
+      aggregateRevision: null,
+      visibility: 'standard',
+      payload: { capability_id: capability.id, version: capability.version },
+      requestId: actor.requestId,
+    });
     const result: WriteResult = {
       status: 201,
       capability,
@@ -574,7 +608,9 @@ export async function listCapabilities(
 
 export async function listEndpoints(pool: Pool, actor: Slice3Actor, agentId: string): Promise<EndpointRecord[]> {
   return withTenant(pool, actor.organizationId, async (client) => {
+    await beginShared(client, actor.organizationId);
     await requireActor(client, actor);
+    await enforceAgent(client, sliceCaller(actor), 'listAgentEndpoints', agentId, 'read');
     if (!(await readAgent(client, actor.organizationId, agentId))) throw new Slice3ServiceError(404, 'AGENT_NOT_FOUND');
     const result = await client.query<EndpointRow>(
       `SELECT ${ENDPOINT_SQL} FROM agent_endpoints
@@ -588,7 +624,9 @@ export async function listEndpoints(pool: Pool, actor: Slice3Actor, agentId: str
 
 export async function getEndpoint(pool: Pool, actor: Slice3Actor, agentId: string, key: string): Promise<{ endpoint: EndpointRecord; etag: string }> {
   return withTenant(pool, actor.organizationId, async (client) => {
+    await beginShared(client, actor.organizationId);
     await requireActor(client, actor);
+    await enforceAgent(client, sliceCaller(actor), 'getAgentEndpoint', agentId, 'read');
     if (!(await readAgent(client, actor.organizationId, agentId))) throw new Slice3ServiceError(404, 'AGENT_NOT_FOUND');
     const row = await readEndpoint(client, actor.organizationId, agentId, key);
     if (!row || row.is_deleted) throw new Slice3ServiceError(404, 'ENDPOINT_NOT_FOUND');
@@ -617,11 +655,18 @@ export async function putEndpoint(
     if_none_match: precondition.kind === 'none' ? '*' : null,
   };
   return withTenant(pool, actor.organizationId, async (client) => {
+    await beginShared(client, actor.organizationId);
     await requireActor(client, actor);
     const replay = await claim(client, actor, 'PUT', path, idempotencyKey, input, headers, 'endpoint');
-    if (replay) return replay;
-    // Lock the agent before the endpoint so quota and retirement races have one order.
+    if (replay) {
+      await enforceAgent(client, sliceCaller(actor), 'putAgentEndpoint', agentId, 'write');
+      return replay;
+    }
+    // Lock the agent before the decision insert. The decision foreign key takes KEY SHARE,
+    // and a later FOR UPDATE from a second writer deadlocks on the upgrade.
     const agent = await lockAgent(client, actor.organizationId, agentId);
+    if (!agent) throw new Slice3ServiceError(404, 'AGENT_NOT_FOUND');
+    await enforceAgent(client, sliceCaller(actor), 'putAgentEndpoint', agentId, 'write');
     assertWritable(agent);
     const current = await lockEndpoint(client, actor.organizationId, agentId, key);
     const active = current !== null && !current.is_deleted;
@@ -661,6 +706,17 @@ export async function putEndpoint(
         outcome: 'success',
         requestId: actor.requestId,
         details: { endpoint_key: key, revision: endpoint.revision, protocol: endpoint.protocol, auth_scheme: endpoint.auth_scheme, enabled: endpoint.enabled, verification: 'self_declared', request_id: actor.requestId },
+      });
+      await appendDirectoryEvent(client, {
+        organizationId: actor.organizationId,
+        eventType: 'com.fad.agent.endpoint_changed.v1',
+        subject: `agent/${agentId}/endpoint/${key}`,
+        aggregateType: 'agent_endpoint',
+        aggregateId: agentId,
+        aggregateRevision: endpoint.revision,
+        visibility: 'standard',
+        payload: { agent_id: agentId, endpoint_key: key, revision: endpoint.revision, change: 'upserted' },
+        requestId: actor.requestId,
       });
       const result: WriteResult = { status: 200, endpoint, etag: endpointEtag(endpoint.revision) };
       await store(client, actor, 'PUT', path, idempotencyKey, input, headers, result);
@@ -714,6 +770,17 @@ export async function putEndpoint(
       requestId: actor.requestId,
       details: { endpoint_key: key, revision: endpoint.revision, protocol: endpoint.protocol, auth_scheme: endpoint.auth_scheme, enabled: endpoint.enabled, verification: 'self_declared', request_id: actor.requestId },
     });
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.agent.endpoint_changed.v1',
+      subject: `agent/${agentId}/endpoint/${key}`,
+      aggregateType: 'agent_endpoint',
+      aggregateId: agentId,
+      aggregateRevision: endpoint.revision,
+      visibility: 'standard',
+      payload: { agent_id: agentId, endpoint_key: key, revision: endpoint.revision, change: 'upserted' },
+      requestId: actor.requestId,
+    });
     const result: WriteResult = { status: 201, endpoint, etag: endpointEtag(endpoint.revision), location: path };
     await store(client, actor, 'PUT', path, idempotencyKey, input, headers, result);
     return result;
@@ -731,10 +798,16 @@ export async function deleteEndpoint(
   const path = endpointPath(agentId, key);
   const headers = { if_match: endpointEtag(revision), if_none_match: null };
   return withTenant(pool, actor.organizationId, async (client) => {
+    await beginShared(client, actor.organizationId);
     await requireActor(client, actor);
     const replay = await claim(client, actor, 'DELETE', path, idempotencyKey, null, headers, 'endpoint');
-    if (replay) return replay;
+    if (replay) {
+      await enforceAgent(client, sliceCaller(actor), 'deleteAgentEndpoint', agentId, 'write');
+      return replay;
+    }
     const agent = await lockAgent(client, actor.organizationId, agentId);
+    if (!agent) throw new Slice3ServiceError(404, 'AGENT_NOT_FOUND');
+    await enforceAgent(client, sliceCaller(actor), 'deleteAgentEndpoint', agentId, 'write');
     assertWritable(agent);
     const current = await lockEndpoint(client, actor.organizationId, agentId, key);
     if (!current || current.is_deleted) throw new Slice3ServiceError(404, 'ENDPOINT_NOT_FOUND');
@@ -768,6 +841,17 @@ export async function deleteEndpoint(
       requestId: actor.requestId,
       details: { endpoint_key: key, revision: asRevision(row.revision), verification: 'self_declared', request_id: actor.requestId },
     });
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.agent.endpoint_changed.v1',
+      subject: `agent/${agentId}/endpoint/${key}`,
+      aggregateType: 'agent_endpoint',
+      aggregateId: agentId,
+      aggregateRevision: asRevision(row.revision),
+      visibility: 'standard',
+      payload: { agent_id: agentId, endpoint_key: key, revision: asRevision(row.revision), change: 'deleted' },
+      requestId: actor.requestId,
+    });
     const result: WriteResult = { status: 204 };
     await store(client, actor, 'DELETE', path, idempotencyKey, null, headers, result);
     return result;
@@ -776,7 +860,9 @@ export async function deleteEndpoint(
 
 export async function listBindings(pool: Pool, actor: Slice3Actor, agentId: string): Promise<BindingRecord[]> {
   return withTenant(pool, actor.organizationId, async (client) => {
+    await beginShared(client, actor.organizationId);
     await requireActor(client, actor);
+    await enforceAgent(client, sliceCaller(actor), 'listAgentCapabilityBindings', agentId, 'read');
     if (!(await readAgent(client, actor.organizationId, agentId))) throw new Slice3ServiceError(404, 'AGENT_NOT_FOUND');
     const result = await client.query<BindingRow>(
       `SELECT ${BINDING_SQL} FROM agent_capability_bindings
@@ -790,7 +876,9 @@ export async function listBindings(pool: Pool, actor: Slice3Actor, agentId: stri
 
 export async function getBinding(pool: Pool, actor: Slice3Actor, agentId: string, capabilityId: string): Promise<{ binding: BindingRecord; etag: string }> {
   return withTenant(pool, actor.organizationId, async (client) => {
+    await beginShared(client, actor.organizationId);
     await requireActor(client, actor);
+    await enforceAgent(client, sliceCaller(actor), 'getAgentCapabilityBinding', agentId, 'read');
     if (!(await readAgent(client, actor.organizationId, agentId))) throw new Slice3ServiceError(404, 'AGENT_NOT_FOUND');
     const result = await client.query<BindingRow>(
       `SELECT ${BINDING_SQL} FROM agent_capability_bindings
@@ -831,10 +919,16 @@ export async function putBinding(
     if_none_match: precondition.kind === 'none' ? '*' : null,
   };
   return withTenant(pool, actor.organizationId, async (client) => {
+    await beginShared(client, actor.organizationId);
     await requireActor(client, actor);
     const replay = await claim(client, actor, 'PUT', path, idempotencyKey, input, headers, 'binding');
-    if (replay) return replay;
+    if (replay) {
+      await enforceAgent(client, sliceCaller(actor), 'putAgentCapabilityBinding', agentId, 'write');
+      return replay;
+    }
     const agent = await lockAgent(client, actor.organizationId, agentId);
+    if (!agent) throw new Slice3ServiceError(404, 'AGENT_NOT_FOUND');
+    await enforceAgent(client, sliceCaller(actor), 'putAgentCapabilityBinding', agentId, 'write');
     assertWritable(agent);
     if (!(await capabilityExists(client, actor.organizationId, capabilityId, input.version))) {
       throw new Slice3ServiceError(404, 'CAPABILITY_NOT_FOUND');
@@ -884,6 +978,17 @@ export async function putBinding(
         outcome: 'success',
         requestId: actor.requestId,
         details: { capability_id: capabilityId, version: binding.version, endpoint_key: binding.endpoint_key, revision: binding.revision, verification: 'self_declared', request_id: actor.requestId },
+      });
+      await appendDirectoryEvent(client, {
+        organizationId: actor.organizationId,
+        eventType: 'com.fad.agent.capability_binding_changed.v1',
+        subject: `agent/${agentId}/capability/${capabilityId}`,
+        aggregateType: 'capability_binding',
+        aggregateId: agentId,
+        aggregateRevision: binding.revision,
+        visibility: 'standard',
+        payload: { agent_id: agentId, capability_id: capabilityId, version: binding.version, endpoint_key: binding.endpoint_key, revision: binding.revision, change: 'upserted' },
+        requestId: actor.requestId,
       });
       const result: WriteResult = { status: 200, binding, etag: bindingEtag(binding.revision) };
       await store(client, actor, 'PUT', path, idempotencyKey, input, headers, result);
@@ -937,6 +1042,17 @@ export async function putBinding(
       requestId: actor.requestId,
       details: { capability_id: capabilityId, version: binding.version, endpoint_key: binding.endpoint_key, revision: binding.revision, verification: 'self_declared', request_id: actor.requestId },
     });
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.agent.capability_binding_changed.v1',
+      subject: `agent/${agentId}/capability/${capabilityId}`,
+      aggregateType: 'capability_binding',
+      aggregateId: agentId,
+      aggregateRevision: binding.revision,
+      visibility: 'standard',
+      payload: { agent_id: agentId, capability_id: capabilityId, version: binding.version, endpoint_key: binding.endpoint_key, revision: binding.revision, change: 'upserted' },
+      requestId: actor.requestId,
+    });
     const result: WriteResult = { status: 201, binding, etag: bindingEtag(binding.revision), location: path };
     await store(client, actor, 'PUT', path, idempotencyKey, input, headers, result);
     return result;
@@ -954,10 +1070,16 @@ export async function deleteBinding(
   const path = bindingPath(agentId, capabilityId);
   const headers = { if_match: bindingEtag(revision), if_none_match: null };
   return withTenant(pool, actor.organizationId, async (client) => {
+    await beginShared(client, actor.organizationId);
     await requireActor(client, actor);
     const replay = await claim(client, actor, 'DELETE', path, idempotencyKey, null, headers, 'binding');
-    if (replay) return replay;
+    if (replay) {
+      await enforceAgent(client, sliceCaller(actor), 'deleteAgentCapabilityBinding', agentId, 'write');
+      return replay;
+    }
     const agent = await lockAgent(client, actor.organizationId, agentId);
+    if (!agent) throw new Slice3ServiceError(404, 'AGENT_NOT_FOUND');
+    await enforceAgent(client, sliceCaller(actor), 'deleteAgentCapabilityBinding', agentId, 'write');
     assertWritable(agent);
     const preview = await client.query<{ endpoint_key: string }>(
       `SELECT endpoint_key FROM agent_capability_bindings
@@ -988,6 +1110,17 @@ export async function deleteBinding(
       outcome: 'success',
       requestId: actor.requestId,
       details: { capability_id: capabilityId, revision: asRevision(row.revision), verification: 'self_declared', request_id: actor.requestId },
+    });
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.agent.capability_binding_changed.v1',
+      subject: `agent/${agentId}/capability/${capabilityId}`,
+      aggregateType: 'capability_binding',
+      aggregateId: agentId,
+      aggregateRevision: asRevision(row.revision),
+      visibility: 'standard',
+      payload: { agent_id: agentId, capability_id: capabilityId, revision: asRevision(row.revision), change: 'deleted' },
+      requestId: actor.requestId,
     });
     const result: WriteResult = { status: 204 };
     await store(client, actor, 'DELETE', path, idempotencyKey, null, headers, result);
@@ -1038,15 +1171,8 @@ export async function discoverAgents(
 ): Promise<{ matches: DiscoveryMatch[]; limit: number; nextCursor: string | null }> {
   const scopes = scopeFingerprint(actor.scopes);
   const filter = discoveryFilterKey(query);
-  const cursor = query.cursor
-    ? decodeDiscoveryCursor(pepper, query.cursor, {
-      org: actor.organizationId,
-      principal: actor.principalId,
-      scopes,
-      filter,
-    }, now)
-    : null;
   return withTenant(pool, actor.organizationId, async (client) => {
+    await beginShared(client, actor.organizationId);
     await requireActor(client, actor);
     await client.query(`SELECT set_config('statement_timeout', $1, true)`, [`${limits.discoveryTimeoutMs}ms`]);
     const predicates = await loadDiscoveryTags(client, actor, query.tags);
@@ -1071,12 +1197,16 @@ export async function discoverAgents(
       const index = values.push(query.protocols);
       protocolSql = `AND endpoints.protocol = ANY($${index}::text[])`;
     }
-    const cursorIndex = values.push(cursor?.id ?? null);
+    const cursorIndex = values.push(null);
     const limitIndex = values.push(query.limit + 1);
     const tagsClause = tagSql.length > 0 ? `AND ${tagSql.join('\n AND ')}` : '';
-    let result;
-    try {
-      result = await client.query<{
+    const caller = sliceCaller(actor);
+    const context = await loadEvalContext(client, caller, 'discoverLocalAgents');
+    const loadRows = async (afterId: string | null, limit: number) => {
+      values[cursorIndex - 1] = afterId;
+      values[limitIndex - 1] = limit;
+      try {
+        return await client.query<{
         agent_id: string;
         organization_id: string;
         name: string;
@@ -1142,11 +1272,12 @@ export async function discoverAgents(
          LIMIT $${limitIndex}`,
         values,
       );
-    } catch (error) {
-      if (pgCode(error) === '57014') throw new Slice3ServiceError(503, 'DEPENDENCY_UNAVAILABLE');
-      throw error;
-    }
-    const page = result.rows.slice(0, query.limit).map((row) => ({
+      } catch (error) {
+        if (pgCode(error) === '57014') throw new Slice3ServiceError(503, 'DEPENDENCY_UNAVAILABLE');
+        throw error;
+      }
+    };
+    const mapRow = (row: Awaited<ReturnType<typeof loadRows>>['rows'][number]): DiscoveryMatch => ({
       agent: {
         id: row.agent_id,
         global_id: `urn:fad:agent:${row.organization_id}:${row.agent_id}`,
@@ -1190,15 +1321,91 @@ export async function discoverAgents(
       }),
       invocation_authorization: 'not_evaluated' as const,
       availability: 'not_checked' as const,
-    }));
-    const boundary = result.rows.length > query.limit ? page[page.length - 1] : undefined;
-    const nextCursor = boundary
-      ? encodeDiscoveryCursor(pepper, {
+    });
+    if (!context || context.mode !== 'enforce') {
+      const cursor = query.cursor
+        ? decodeDiscoveryCursor(pepper, query.cursor, {
+          org: actor.organizationId,
+          principal: actor.principalId,
+          scopes,
+          filter,
+        }, now)
+        : null;
+      const result = await loadRows(cursor?.id ?? null, query.limit + 1);
+      const page = result.rows.slice(0, query.limit).map((row) => mapRow(row));
+      if (context) {
+        for (const match of page) {
+          await authorizeCandidate(client, caller, context, 'discoverLocalAgents', {
+            id: match.agent.id,
+            status: 'active',
+            revision: match.agent.revision,
+          });
+        }
+      }
+      const boundary = result.rows.length > query.limit ? page[page.length - 1] : undefined;
+      const nextCursor = boundary
+        ? encodeDiscoveryCursor(pepper, {
+          org: actor.organizationId,
+          principal: actor.principalId,
+          scopes,
+          filter,
+          id: boundary.agent.id,
+        }, now)
+        : null;
+      return { matches: page, limit: query.limit, nextCursor };
+    }
+    const enfFilter = `discover:${filter}`;
+    const start = query.cursor
+      ? decodeEnforcementCursor(pepper, query.cursor, {
         org: actor.organizationId,
         principal: actor.principalId,
-        scopes,
-        filter,
-        id: boundary.agent.id,
+        filter: enfFilter,
+        mode: 'enforce',
+        revision: context.revision,
+        operation: 'discoverLocalAgents',
+      }, now)
+      : null;
+    const budget = enforcementScanLimit();
+    const page: DiscoveryMatch[] = [];
+    let afterId = start?.id ?? null;
+    let scanned = 0;
+    let more = false;
+    while (page.length < query.limit && scanned < budget) {
+      const room = Math.min(100, budget - scanned);
+      const result = await loadRows(afterId, room + 1);
+      if (result.rows.length === 0) {
+        more = false;
+        break;
+      }
+      let index = 0;
+      while (index < result.rows.length && index < room && page.length < query.limit && scanned < budget) {
+        const row = result.rows[index];
+        if (!row) throw new EnforcementServiceError(503, 'DEPENDENCY_UNAVAILABLE');
+        scanned += 1;
+        afterId = row.agent_id;
+        const match = mapRow(row);
+        const allowed = await authorizeCandidate(client, caller, context, 'discoverLocalAgents', {
+          id: match.agent.id,
+          status: 'active',
+          revision: match.agent.revision,
+        });
+        if (allowed) page.push(match);
+        index += 1;
+      }
+      more = index < result.rows.length;
+      if (!more || page.length >= query.limit) break;
+    }
+    if (more && page.length < query.limit) throw new EnforcementServiceError(503, 'ENFORCEMENT_SCAN_BUDGET_EXCEEDED');
+    const nextCursor = more && afterId
+      ? encodeEnforcementCursor(pepper, {
+        org: actor.organizationId,
+        principal: actor.principalId,
+        filter: enfFilter,
+        mode: 'enforce',
+        revision: context.revision,
+        operation: 'discoverLocalAgents',
+        at: afterId,
+        id: afterId,
       }, now)
       : null;
     return { matches: page, limit: query.limit, nextCursor };

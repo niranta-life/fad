@@ -1,0 +1,5 @@
+2026-10-22T20:20:26.172Z PASS LOCK-ORDER uncommitted lower sequence blocked=true sequence=1
+2026-10-22T20:20:26.173Z PASS LOCK-FANOUT fanout cursor stayed at 1 while an uncommitted event was open
+2026-10-22T20:20:27.040Z PASS REST-MCP request=f7dc645b-dea8-4ef1-89dc-3904df7cf4e6 events=2 bind=yes
+2026-10-22T20:20:27.056Z PASS NOOP-NONE noop=200 bad=422 events=2
+2026-10-22T20:20:31.805Z PASS POLICY-DENY code=POLICY_DENIED events_unchanged=true

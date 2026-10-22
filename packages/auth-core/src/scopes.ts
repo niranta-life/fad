@@ -13,6 +13,22 @@ export const KNOWN_SCOPES = [
   'capabilities:write',
   'endpoints:read',
   'endpoints:write',
+  'policies:read',
+  'policies:write',
+  'policies:activate',
+  'policies:evaluate:self',
+  'policies:evaluate:any',
+  'policies:explain',
+  'enforcement:read',
+  'enforcement:manage',
+  'enforcement:audit',
+  'policies:attributes:write',
+  'events:read',
+  'events:subscribe',
+  'events:manage',
+  'events:replay',
+  'events:delivery:read',
+  'events:restricted:read',
 ] as const;
 
 export type KnownScope = (typeof KNOWN_SCOPES)[number];

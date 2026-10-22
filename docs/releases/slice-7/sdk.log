@@ -1,0 +1,2 @@
+2026-10-22T20:20:27.002Z PASS MCP-CATALOG count=35 unpublished=12 shape=match
+2026-10-22T20:20:33.150Z PASS SDK listed=2 got=8ef59f41-4ef6-4fa8-a6e1-cf1392212a35 enforcement=not_enforced hmac=true

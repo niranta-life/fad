@@ -229,7 +229,7 @@ export class FadMcpClient {
   async connect(): Promise<void> {
     const version = this.options.preferredVersion ?? '2026-07-28';
     const client = new Client(
-      { name: '@fad/mcp-client', version: '0.1.0' },
+      { name: '@fad/mcp-client', version: '0.2.0' },
       { versionNegotiation: { mode: version === '2025-11-25' ? 'legacy' : { pin: '2026-07-28' } } },
     );
     const transport = new StreamableHTTPClientTransport(new URL(this.options.serverUrl), {
@@ -252,25 +252,7 @@ export class FadMcpClient {
     if (!READ_TOOLS.has(name) && !WRITE_TOOLS.has(name)) {
       throw new FadMcpProtocolError(-32602, 'The tool is not enabled.');
     }
-    const mutation = WRITE_TOOLS.has(name);
-    const key = idempotencyKeyOf(args);
-    if (mutation && (key === undefined || !IDEMPOTENCY_KEY.test(key))) {
-      throw new FadMcpToolError('VALIDATION_ERROR', 'A caller-chosen idempotency key is required.', '', false);
-    }
-    const client = this.requireClient();
-    const run = async (): Promise<FadToolResult<T>> => {
-      const result = await client.callTool(
-        { name, arguments: args },
-        { timeout: this.timeoutMs(), signal: this.options.signal },
-      );
-      return this.readResult<T>(result);
-    };
-    try {
-      if (!mutation) return await this.withReadRetry(run);
-      return await run();
-    } catch (error) {
-      throw classify(error, mutation, key, this.options.signal);
-    }
+    return this.invoke(name, args, WRITE_TOOLS.has(name) ? 'write' : 'read');
   }
 
   async close(): Promise<void> {
@@ -336,6 +318,55 @@ export class FadMcpClient {
 
   discoverAgents(args: { query: Record<string, unknown> }): Promise<FadToolResult<unknown>> {
     return this.callTool('fad_discover_agents', args);
+  }
+
+  listPolicies(args: { status?: 'draft' | 'active' | 'disabled'; limit?: number; cursor?: string } = {}): Promise<FadToolResult<unknown>> {
+    return this.invoke('fad_list_policies', args, 'read');
+  }
+
+  getPolicy(args: { policy_id: string }): Promise<FadToolResult<unknown>> {
+    return this.invoke('fad_get_policy', args, 'read');
+  }
+
+  createPolicy(args: { definition: Record<string, unknown>; idempotency_key: string }): Promise<FadToolResult<unknown>> {
+    return this.invoke('fad_create_policy', args, 'write');
+  }
+
+  updateDraftPolicy(args: { policy_id: string; definition: Record<string, unknown>; if_match: string; idempotency_key: string }): Promise<FadToolResult<unknown>> {
+    return this.invoke('fad_update_draft_policy', args, 'write');
+  }
+
+  activatePolicy(args: { policy_id: string; if_match: string; idempotency_key: string }): Promise<FadToolResult<unknown>> {
+    return this.invoke('fad_activate_policy', args, 'write');
+  }
+
+  disablePolicy(args: { policy_id: string; if_match: string; idempotency_key: string }): Promise<FadToolResult<unknown>> {
+    return this.invoke('fad_disable_policy', args, 'write');
+  }
+
+  evaluateAccess(args: Record<string, unknown>): Promise<FadToolResult<unknown>> {
+    return this.invoke('fad_evaluate_access', args, 'once');
+  }
+
+  private async invoke<T>(name: string, args: Record<string, unknown>, mode: 'read' | 'write' | 'once'): Promise<FadToolResult<T>> {
+    const key = idempotencyKeyOf(args);
+    if (mode === 'write' && (key === undefined || !IDEMPOTENCY_KEY.test(key))) {
+      throw new FadMcpToolError('VALIDATION_ERROR', 'A caller-chosen idempotency key is required.', '', false);
+    }
+    const client = this.requireClient();
+    const run = async (): Promise<FadToolResult<T>> => {
+      const result = await client.callTool(
+        { name, arguments: args },
+        { timeout: this.timeoutMs(), signal: this.options.signal },
+      );
+      return this.readResult<T>(result);
+    };
+    try {
+      if (mode === 'read') return await this.withReadRetry(run);
+      return await run();
+    } catch (error) {
+      throw classify(error, mode !== 'read', key, this.options.signal);
+    }
   }
 
   private timeoutMs(): number {

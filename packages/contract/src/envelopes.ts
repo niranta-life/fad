@@ -26,6 +26,16 @@ export const ERRORS = {
   ENDPOINT_NOT_FOUND: 'Endpoint not found.',
   BINDING_NOT_FOUND: 'Binding not found.',
   INVALID_CURSOR: 'Cursor is invalid.',
+  CONFLICT: 'The request conflicts with the current state.',
+  POLICY_DENIED: 'The request is denied by organization policy.',
+  ENFORCEMENT_SCAN_BUDGET_EXCEEDED: 'The directory could not build a complete page.',
+  SECRET_RECEIPT_EXPIRED: 'The signing secret can no longer be shown for this key.',
+  EVENT_SCAN_BUDGET_EXCEEDED: 'The directory could not build a complete event page.',
+  CURSOR_CONTEXT_CHANGED: 'The cursor does not match this caller.',
+  EVENT_CURSOR_EXPIRED: 'The event cursor has expired.',
+  WEBHOOK_URL_REJECTED: 'The webhook URL is not allowed.',
+  REPLAY_RANGE_EXPIRED: 'The replay range is outside retention.',
+  DELIVERY_TEMPORARILY_UNAVAILABLE: 'Event delivery is temporarily unavailable.',
 } as const;
 
 export type ErrorCode = keyof typeof ERRORS;

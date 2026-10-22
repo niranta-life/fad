@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { hasScope } from '@fad/auth-core';
 import { insertAudit } from './audit.js';
+import { appendDirectoryEvent } from './event-outbox.js';
 import { canonicalJson, type AgentStatus } from './agent-rules.js';
 import { beginIdempotency, requestFingerprint, writeIdempotency, IdempotencyConflictError } from './idempotency.js';
 import {
@@ -22,6 +23,19 @@ import {
   type TagVisibility,
   TagServiceError,
 } from './tag-rules.js';
+import {
+  EnforcementServiceError,
+  authorizeCandidate,
+  beginExclusive,
+  beginShared,
+  decodeEnforcementCursor,
+  encodeEnforcementCursor,
+  enforceAgent,
+  enforcementScanLimit,
+  guardReferencedTag,
+  loadEvalContext,
+  type EnforcementCaller,
+} from './enforcement.js';
 import { withTenant } from './tenant.js';
 
 const RETENTION_MS = 24 * 60 * 60 * 1000;
@@ -34,6 +48,17 @@ export interface TagActor {
   principalId: string;
   requestId: string;
   scopes: readonly string[];
+  channel?: 'rest' | 'mcp';
+}
+
+function tagCaller(actor: TagActor): EnforcementCaller {
+  return {
+    organizationId: actor.organizationId,
+    principalId: actor.principalId,
+    requestId: actor.requestId,
+    scopes: actor.scopes,
+    channel: actor.channel,
+  };
 }
 
 export interface TagLimits {
@@ -361,6 +386,17 @@ export async function createTagDefinition(
           request_id: actor.requestId,
         },
       });
+      await appendDirectoryEvent(client, {
+        organizationId: actor.organizationId,
+        eventType: 'com.fad.tag.definition_created.v1',
+        subject: `tag/${definition.namespace}/${definition.key}`,
+        aggregateType: 'tag_definition',
+        aggregateId: null,
+        aggregateRevision: null,
+        visibility: definition.governed || definition.visibility === 'restricted' ? 'restricted' : 'standard',
+        payload: { namespace: definition.namespace, key: definition.key, change: 'upserted' },
+        requestId: actor.requestId,
+      });
       const result: TagWriteResult = {
         status: 201,
         definition,
@@ -539,14 +575,20 @@ export async function putAgentTag(
     change_reason: input.reason,
   };
   return withTenant(pool, actor.organizationId, async (client) => {
+    await beginExclusive(client, actor.organizationId);
     await requireActor(client, actor);
     const definition = await readDefinition(client, actor.organizationId, namespace, key);
     if (!definition) throw new TagServiceError(404, 'TAG_DEFINITION_NOT_FOUND');
     if ((definition.governed || definition.visibility === 'restricted') && !canGovern(actor.scopes)) {
       throw new TagServiceError(403, 'FORBIDDEN');
     }
+    await guardReferencedTag(client, tagCaller(actor), namespace, key);
     const replay = await claim(client, actor, 'PUT', path, idempotencyKey, input, headers);
-    if (replay) return replay;
+    if (replay) {
+      await enforceAgent(client, tagCaller(actor), 'putAgentTag', agentId, 'write');
+      return replay;
+    }
+    await enforceAgent(client, tagCaller(actor), 'putAgentTag', agentId, 'write');
     const agent = await lockAgent(client, actor.organizationId, agentId);
     if (!agent) throw new TagServiceError(404, 'AGENT_NOT_FOUND');
     if (agent.status === 'retired') throw new TagServiceError(409, 'INVALID_AGENT_STATE');
@@ -580,6 +622,17 @@ export async function putAgentTag(
       if (!row) throw new Error('tag update returned no row');
       const assignment = toAssignment(row);
       await writeAssignmentHistory(client, actor, assignment, 'updated', existing.value, value, existing.revision, reason);
+      await appendDirectoryEvent(client, {
+        organizationId: actor.organizationId,
+        eventType: 'com.fad.tag.assignment_changed.v1',
+        subject: `agent/${agentId}/tag/${namespace}/${key}`,
+        aggregateType: 'tag_assignment',
+        aggregateId: agentId,
+        aggregateRevision: assignment.revision,
+        visibility: definition.governed || definition.visibility === 'restricted' ? 'restricted' : 'standard',
+        payload: { agent_id: agentId, namespace, key, revision: assignment.revision, change: 'assigned' },
+        requestId: actor.requestId,
+      });
       const result: TagWriteResult = { status: 200, assignment, etag: tagEtag(assignment.revision) };
       await store(client, actor, 'PUT', path, idempotencyKey, input, headers, result);
       return result;
@@ -619,6 +672,17 @@ export async function putAgentTag(
       assignment = toAssignment({ ...row, governed: definition.governed, visibility: definition.visibility });
     }
     await writeAssignmentHistory(client, actor, assignment, 'assigned', null, value, previousRevision, reason);
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.tag.assignment_changed.v1',
+      subject: `agent/${agentId}/tag/${namespace}/${key}`,
+      aggregateType: 'tag_assignment',
+      aggregateId: agentId,
+      aggregateRevision: assignment.revision,
+      visibility: definition.governed || definition.visibility === 'restricted' ? 'restricted' : 'standard',
+      payload: { agent_id: agentId, namespace, key, revision: assignment.revision, change: 'assigned' },
+      requestId: actor.requestId,
+    });
     const result: TagWriteResult = {
       status: 201,
       assignment,
@@ -643,14 +707,20 @@ export async function deleteAgentTag(
   const path = assignmentPath(agentId, namespace, key);
   const headers = { if_match: tagEtag(revision), if_none_match: null, change_reason: changeReason };
   return withTenant(pool, actor.organizationId, async (client) => {
+    await beginExclusive(client, actor.organizationId);
     await requireActor(client, actor);
     const definition = await readDefinition(client, actor.organizationId, namespace, key);
     if (!definition) throw new TagServiceError(404, 'TAG_ASSIGNMENT_NOT_FOUND');
     if ((definition.governed || definition.visibility === 'restricted') && !canGovern(actor.scopes)) {
       throw new TagServiceError(403, 'FORBIDDEN');
     }
+    await guardReferencedTag(client, tagCaller(actor), namespace, key);
     const replay = await claim(client, actor, 'DELETE', path, idempotencyKey, null, headers);
-    if (replay) return replay;
+    if (replay) {
+      await enforceAgent(client, tagCaller(actor), 'deleteAgentTag', agentId, 'write');
+      return replay;
+    }
+    await enforceAgent(client, tagCaller(actor), 'deleteAgentTag', agentId, 'write');
     const reason = definition.governed ? requireChangeReason(changeReason) : changeReason;
     const agent = await lockAgent(client, actor.organizationId, agentId);
     if (!agent) throw new TagServiceError(404, 'AGENT_NOT_FOUND');
@@ -678,6 +748,17 @@ export async function deleteAgentTag(
       updated_at: asTime(row.updated_at),
     };
     await writeAssignmentHistory(client, actor, tombstone, 'deleted', existing.value, null, existing.revision, reason);
+    await appendDirectoryEvent(client, {
+      organizationId: actor.organizationId,
+      eventType: 'com.fad.tag.assignment_changed.v1',
+      subject: `agent/${agentId}/tag/${namespace}/${key}`,
+      aggregateType: 'tag_assignment',
+      aggregateId: agentId,
+      aggregateRevision: tombstone.revision,
+      visibility: definition.governed || definition.visibility === 'restricted' ? 'restricted' : 'standard',
+      payload: { agent_id: agentId, namespace, key, revision: tombstone.revision, change: 'removed' },
+      requestId: actor.requestId,
+    });
     const result: TagWriteResult = { status: 204 };
     await store(client, actor, 'DELETE', path, idempotencyKey, null, headers, result);
     return result;
@@ -692,6 +773,8 @@ export async function getAgentTag(
   key: string,
 ): Promise<{ assignment: TagAssignmentRecord; etag: string }> {
   return withTenant(pool, actor.organizationId, async (client) => {
+    await beginShared(client, actor.organizationId);
+    await enforceAgent(client, tagCaller(actor), 'getAgentTag', agentId, 'read');
     const agent = await client.query<{ id: string }>(
       'SELECT id FROM agents WHERE organization_id = $1 AND id = $2',
       [actor.organizationId, agentId],
@@ -712,6 +795,8 @@ export async function listAgentTags(
   agentId: string,
 ): Promise<TagAssignmentRecord[]> {
   return withTenant(pool, actor.organizationId, async (client) => {
+    await beginShared(client, actor.organizationId);
+    await enforceAgent(client, tagCaller(actor), 'listAgentTags', agentId, 'read');
     const agent = await client.query<{ id: string }>(
       'SELECT id FROM agents WHERE organization_id = $1 AND id = $2',
       [actor.organizationId, agentId],
@@ -818,10 +903,8 @@ export async function searchAgents(
 ): Promise<{ agents: ReturnType<typeof toAgent>[]; limit: number; nextCursor: string | null }> {
   const restricted = hasScope(actor.scopes, 'tags:restricted:read');
   const filter = searchFilterKey(query);
-  const cursor = query.cursor
-    ? decodeSearchCursor(pepper, query.cursor, { org: actor.organizationId, filter, restricted }, now)
-    : null;
   return withTenant(pool, actor.organizationId, async (client) => {
+    await beginShared(client, actor.organizationId);
     const loaded = [];
     for (const predicate of query.tags ?? []) {
       const definition = await readDefinition(client, actor.organizationId, predicate.namespace, predicate.key);
@@ -841,23 +924,100 @@ export async function searchAgents(
         ),
       });
     }
-    const built = buildAgentSearchQuery({
-      organizationId: actor.organizationId,
-      status: query.status,
-      predicates,
-      cursor,
-      limit: query.limit,
-    });
-    const result = await client.query<AgentRow>(built.text, built.values);
-    const page = result.rows.slice(0, query.limit).map((row) => toAgent(row));
-    const boundary = result.rows.length > query.limit ? result.rows[query.limit - 1] : undefined;
-    const nextCursor = boundary?.created_at_exact
-      ? encodeSearchCursor(pepper, {
+    const caller = tagCaller(actor);
+    const context = await loadEvalContext(client, caller, 'searchAgentsByTags');
+    const runQuery = async (position: { at: string; id: string } | null, limit: number) => {
+      const built = buildAgentSearchQuery({
+        organizationId: actor.organizationId,
+        status: query.status,
+        predicates,
+        cursor: position,
+        limit,
+      });
+      const result = await client.query<AgentRow>(built.text, built.values);
+      return result.rows;
+    };
+    if (!context || context.mode !== 'enforce') {
+      const cursor = query.cursor
+        ? decodeSearchCursor(pepper, query.cursor, { org: actor.organizationId, filter, restricted }, now)
+        : null;
+      const rows = await runQuery(cursor, query.limit);
+      const page = rows.slice(0, query.limit).map((row) => toAgent(row));
+      if (context) {
+        for (const agent of page) {
+          await authorizeCandidate(client, caller, context, 'searchAgentsByTags', {
+            id: agent.id,
+            status: agent.status,
+            revision: agent.revision,
+          });
+        }
+      }
+      const boundary = rows.length > query.limit ? rows[query.limit - 1] : undefined;
+      const nextCursor = boundary?.created_at_exact
+        ? encodeSearchCursor(pepper, {
+          org: actor.organizationId,
+          filter,
+          restricted,
+          at: boundary.created_at_exact,
+          id: boundary.id,
+        }, now)
+        : null;
+      return { agents: page, limit: query.limit, nextCursor };
+    }
+    const enfFilter = `search:${filter}:restricted:${restricted ? '1' : '0'}`;
+    const start = query.cursor
+      ? decodeEnforcementCursor(pepper, query.cursor, {
         org: actor.organizationId,
-        filter,
-        restricted,
-        at: boundary.created_at_exact,
-        id: boundary.id,
+        principal: actor.principalId,
+        filter: enfFilter,
+        mode: 'enforce',
+        revision: context.revision,
+        operation: 'searchAgentsByTags',
+      }, now)
+      : null;
+    const budget = enforcementScanLimit();
+    const page: ReturnType<typeof toAgent>[] = [];
+    let at = start?.at ?? null;
+    let id = start?.id ?? null;
+    let scanned = 0;
+    let more = false;
+    while (page.length < query.limit && scanned < budget) {
+      const room = Math.min(100, budget - scanned);
+      const rows = await runQuery(at && id ? { at, id } : null, room);
+      if (rows.length === 0) {
+        more = false;
+        break;
+      }
+      let index = 0;
+      while (index < rows.length && index < room && page.length < query.limit && scanned < budget) {
+        const row = rows[index];
+        if (!row?.created_at_exact) throw new EnforcementServiceError(503, 'DEPENDENCY_UNAVAILABLE');
+        scanned += 1;
+        at = row.created_at_exact;
+        id = row.id;
+        const agent = toAgent(row);
+        const allowed = await authorizeCandidate(client, caller, context, 'searchAgentsByTags', {
+          id: agent.id,
+          status: agent.status,
+          revision: agent.revision,
+        });
+        if (allowed) page.push(agent);
+        index += 1;
+      }
+      more = index < rows.length;
+      if (!more || page.length >= query.limit) break;
+    }
+    if (more && page.length < query.limit) throw new EnforcementServiceError(503, 'ENFORCEMENT_SCAN_BUDGET_EXCEEDED');
+    const nextCursor = more && at && id
+      ? encodeEnforcementCursor(pepper, {
+        org: actor.organizationId,
+        principal: actor.principalId,
+        filter: enfFilter,
+        mode: 'enforce',
+        revision: context.revision,
+        operation: 'searchAgentsByTags',
+        at,
+        id,
       }, now)
       : null;
     return { agents: page, limit: query.limit, nextCursor };

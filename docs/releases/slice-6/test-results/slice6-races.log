@@ -1,0 +1,66 @@
+2026-10-22T04:56:11.814Z PASS API ready=true
+2026-10-22T04:56:11.860Z PASS S02 put=200 org=bfcb246a-5ef4-4fe3-9f77-40b115977498 b=off/0 rows=0 req=8f1f0d00-801b-45e4-acd4-cf2f60a024fd
+2026-10-22T04:56:11.865Z PASS S13 status=422 code=VALIDATION_ERROR req=fd8e38db-afc0-4fbf-a7b4-e98db011f9b6
+2026-10-22T04:56:11.875Z PASS S17 invoke=422 foo=422
+2026-10-22T04:56:12.003Z PASS AGENTS b=201
+2026-10-22T04:56:12.045Z PASS TAG-DEFS 201,201,201,201,201
+2026-10-22T04:56:12.159Z PASS TAG-ASSIGN 201,201,201,201,201,201,201,201,201,201,201,201
+2026-10-22T04:56:12.228Z PASS SLICE3 publish=201
+2026-10-22T04:56:12.419Z PASS POLICIES 200,200,200,200,200,200,200
+2026-10-22T04:56:12.419Z PASS T07-UNKNOWN status=422 code=VALIDATION_ERROR
+2026-10-22T04:56:12.419Z PASS T09-STRING status=422 code=VALIDATION_ERROR
+2026-10-22T04:56:12.439Z PASS S15 preflight=200 key=401 bearer=401
+2026-10-22T04:56:12.470Z PASS A24 put=200 cache=private, no-store|private, no-store|private, no-store|private, no-store req=55edd7f4-29a4-480a-9cc8-28f31d5a48e2,42079fc9-3907-4a91-86a7-511324b15923,a0799435-a1c0-4841-bf40-63fb4d01970f,2c3dba60-d7cd-49e7-9f3e-56ab7580cea4
+2026-10-22T04:56:12.570Z PASS A22 decision=200
+2026-10-22T04:56:12.570Z PASS ENFORCE {"data":{"organization_id":"bfcb246a-5ef4-4fe3-9f77-40b115977498","mode":"enforce","actions":["agent.read","agent.discover","agent.update","agent.suspend"],"revision":2,"updated_by":"7e87d626-d5fc-4463-b690-b9eed0a2ffbb","updated_at":"2026-
+2026-10-22T04:56:12.579Z NOTE LOG-LEVEL new_connection=log
+2026-10-22T04:56:12.842Z PASS DEAD-API ready=true
+2026-10-22T04:56:15.148Z PASS D-DEADLOCK held=true waiting=true status=503 ms=1021 log=1 deadlocks=7->8 lock=ok name=Deadlock Target rev=1 mode=enforce req=9ad5d6e1-a886-4a9c-a8a0-155dece906d4
+2026-10-22T04:56:15.148Z NOTE D-DEADLOCK-LOG 2026-10-22 04:56:13.849 UTC [4462] LOG:  process 4462 detected deadlock while waiting for ShareLock on transaction 63400 after 1001.485 ms
+2026-10-22T04:56:15.148Z NOTE D-DEADLOCK-API ,"time":1792644972842,"pid":8797,"hostname":"mini-me.local","reqId":"0bb3caca-4b42-46c2-8f3e-f76335b6fc8b","request_id":"0bb3caca-4b42-46c2-8f3e-f76335b6fc8b","status":200,"method":"GET","path":"/health/live","msg":"request"} {"level":30,"time":1792644973868,"pid":8797,"hostname":"mini-me.local","reqId":"9ad5d6e1-a886-4a9c-a8a0-155dece906d4","request_id":"9ad5d6e1-a886-4a9c-a8a0-155dece906d4","status":503,"method":"PATCH","path":"/v1/agents/49c75ec6-5649-41eb-98e9-cbd27dd7d4c9","msg":"request"} 
+2026-10-22T04:56:17.728Z PASS D01 held=true get=200/2523 put=200/2502 rev=2->3 req=8fdb3fcf-7b80-460f-b981-f442853c8c9f
+2026-10-22T04:56:32.977Z PASS D03 held=true mid="high" get=200 put=200 after="low" low=404 restore=200 high=200 before="high"
+2026-10-22T04:56:35.522Z PASS D06 held=true mid=Fence Target status=200 rev=1->2 audit=0->1 revisions=1->2 decision=1 req=fb1c9fe1-9343-410f-b7d3-6437efdff1c6
+2026-10-22T04:56:38.054Z PASS D07 held=true mid=0 after=1 matched=true status=404 req=4fe8cd45-a58f-48f0-938f-6622cd1970f3
+2026-10-22T04:56:45.712Z PASS D02 held=true patch=200/2556 disable=200/2528 policy=disabled next=403 restore=200 get=200
+2026-10-22T04:56:45.761Z PASS D04 status=200/ok/34ms,412/PRECONDITION_FAILED/35ms rev=3->4 name=Fence Raced state=active
+2026-10-22T04:56:45.791Z PASS D05 first=200 second=200 rev=1->2->2
+2026-10-22T04:56:45.810Z PASS D12 create=201 status=200,412 revisions=2 max=2
+2026-10-22T04:56:45.840Z PASS D14 preflight=200 status=200,412 rev=3->4
+2026-10-22T04:56:45.870Z PASS C06 page=200 cursor=string filter=400 code=VALIDATION_ERROR
+2026-10-22T04:56:45.936Z PASS P11 read=200/200/200 hide=404/404/404
+2026-10-22T04:56:45.956Z PASS P06 status=404 reason=EXPLICIT_DENY outcome=denied req=f0fdd388-429d-4380-960e-a9f650ae38f6
+2026-10-22T04:56:45.956Z PASS P26 eval=deny/EXPLICIT_DENY/not_enforced pep=EXPLICIT_DENY
+2026-10-22T04:56:45.994Z PASS P12 writer=403/POLICY_DENIED binding=403/POLICY_DENIED admin=200
+2026-10-22T04:56:46.017Z PASS T10 body=400/400 plain=404/200
+2026-10-22T04:56:46.047Z PASS T08 false=200 true=404 missing=404
+2026-10-22T04:56:46.057Z PASS T09 number=200 string=422
+2026-10-22T04:56:46.101Z PASS T07 unknown=422 before=200 tag=200 etag="tag-v1" delete=204/ after=404
+2026-10-22T04:56:46.159Z PASS S18 a=200/Allowed Anchor b=200/foreign-marker
+2026-10-22T04:56:46.165Z PASS S05 fk=23503 rls=42501/new row violates row-level security policy for table "fad_enforcement_decisions" leftover=0
+2026-10-22T04:56:46.221Z PASS C12 before=200 after=200 retire=200
+2026-10-22T04:56:46.256Z PASS P10-PATCH status=200
+2026-10-22T04:56:46.256Z PASS P10-RETIRE status=200
+2026-10-22T04:56:46.256Z PASS P10-ACTIVATE suspend=200 activate=403/POLICY_DENIED
+2026-10-22T04:56:46.256Z NOTE P10 PARTIAL patch=200 retire=200 activate=403 code=POLICY_DENIED
+2026-10-22T04:56:46.659Z PASS T13 ready=true put=200 get=200 value=treasury
+2026-10-22T04:56:46.660Z NOTE P25 NOT RUN no explanation route; attempt /v1/authorization/explain 404, /v1/policies/0f14c007-066a-4749-ae69-8dfce90f98e8/explain 404
+2026-10-22T04:56:46.660Z NOTE T14 NOT RUN no explanation route; attempt /v1/authorization/explain 404, /v1/policies/0f14c007-066a-4749-ae69-8dfce90f98e8/explain 404
+2026-10-22T04:56:46.660Z NOTE R19 NOT RUN no .github workflow and no CI run id
+2026-10-22T04:56:46.676Z PASS R03 name=PolicyDeniedError status=403 code=POLICY_DENIED request=7365a3eb-82e1-445d-898d-dc6c8aa53349
+2026-10-22T04:56:48.033Z PASS R04 ready=true name=ServiceUnavailableError code=DEPENDENCY_UNAVAILABLE fetches=1 mode=enforce/4
+2026-10-22T04:56:48.230Z PASS R18 exit=1 changed=true
+2026-10-22T04:56:48.811Z PASS S08 ready=true error=true code=UNPARSED rows=0 rev=4 body=Input validation error: Invalid arguments for tool fad_get_enforcement_config: Unrecognized key: "organization_id"
+2026-10-22T04:56:48.811Z PASS S09 error=true code=THREW mode=enforce/4
+2026-10-22T04:56:49.444Z PASS D16 ready=true held=true stop=0 response=thrown name=Deadlock Target rev=1 decisions=2->2 logs=09086,"pid":8947,"hostname":"mini-me.local","reqId":"6c6494a4-fe81-404f-bbcf-d7cd46d1a1c7","request_id":"6c6494a4-fe81-404f-bbcf-d7cd46d1a1c7","status":200,"method":"GET","path":"/health/live","msg":"request"} ENFORCEMENT_DEPENDENCY_FAILED
+2026-10-22T04:56:59.812Z PASS C14 ready=true status=503 code=ENFORCEMENT_SCAN_BUDGET_EXCEEDED ms=9997 req=03a75126-2a31-47e1-9f5f-3403f54f279b
+2026-10-22T04:57:00.043Z NOTE SUMMARY pass=49 fail=0
+✔ slice 6 deadlock, fences, and remaining local cases (49801.649791ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 49964.957417

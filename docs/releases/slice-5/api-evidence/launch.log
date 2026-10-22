@@ -1,0 +1,36 @@
+{
+  "off": [
+    {
+      "label": "off-1",
+      "ready": true,
+      "current": 200,
+      "hidden": 404,
+      "org": "9c760a29-aa7a-4257-bf36-256ac77f3ac7"
+    },
+    {
+      "label": "off-2",
+      "ready": true,
+      "current": 200,
+      "hidden": 404,
+      "org": "9c760a29-aa7a-4257-bf36-256ac77f3ac7"
+    }
+  ],
+  "on": [
+    {
+      "label": "on-1",
+      "ready": true,
+      "status": 200,
+      "decision": "allow",
+      "enforcement": "not_enforced",
+      "request": "dedb58f5-7778-4389-acc1-024b9c5dfd85"
+    },
+    {
+      "label": "on-2",
+      "ready": true,
+      "status": 200,
+      "decision": "allow",
+      "enforcement": "not_enforced",
+      "request": "d3f2926a-dc1d-4836-a162-fca6635ea8a2"
+    }
+  ]
+}
