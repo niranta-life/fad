@@ -1,0 +1,28 @@
+{
+  "image": "fad-api:slice5",
+  "started_at": "2026-10-21T21:53:23.984Z",
+  "network": "fad-s0",
+  "database_host": "fad-s0-pg:5432",
+  "overrides": ["NODE_ENV=development", "FAD_INGRESS_TLS=cleartext"],
+  "flag_not_overridden": true,
+  "process_FAD_POLICIES_ENABLED": "false",
+  "inspect": "user=node readonly=true memory=536870912 nano=1000000000 capdrop=[\"ALL\"] security=[\"no-new-privileges:true\"]",
+  "uid": "uid=1000(node) gid=1000(node) groups=1000(node)",
+  "root_write_exit": 1,
+  "tmp_write_exit": 0,
+  "ready_wait_ms": 662,
+  "before": {
+    "live": {"status": 200, "request_id": "fbd24f60-ad2d-47b2-9536-6a679791b211"},
+    "ready": {"status": 200, "request_id": "e46c6654-31e9-4728-8179-0b32b5e86dd0"},
+    "current": {"status": 401, "error": "UNAUTHORIZED", "request_id": "cc5ec5e7-b8e1-4188-a430-511eaf4d1a85"},
+    "policies": {"status": 404, "error": "NOT_FOUND", "request_id": "577e6d48-6b02-4fbc-a0d8-c753c333b6c5"}
+  },
+  "restart_exit": 0,
+  "restart_wait_ms": 434,
+  "after": {
+    "live": {"status": 200, "request_id": "db6eb903-361c-4111-a4d5-710aaa711dec"},
+    "ready": {"status": 200, "request_id": "31cde816-afea-484d-9d23-1cc81f047041"},
+    "current": {"status": 401, "error": "UNAUTHORIZED", "request_id": "e1c8ae6a-e127-46eb-8311-f18e2e419f21"},
+    "policies": {"status": 404, "error": "NOT_FOUND", "request_id": "9e73c85f-e860-4b89-abcb-41a645f69a9b"}
+  }
+}

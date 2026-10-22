@@ -1,0 +1,36 @@
+# Additive overlay for an existing API Deployment. It does not create a cluster,
+# a database, or a second identity provider. Apply it only after the policy
+# migration job has succeeded. The default leaves evaluation off.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fad-api
+  labels:
+    app.kubernetes.io/name: fad-api
+    app.kubernetes.io/component: policy-overlay
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+          env:
+            - name: FAD_POLICIES_ENABLED
+              value: "false"
+            - name: FAD_POLICY_WRITE_BODY_MAX_BYTES
+              value: "65536"

@@ -14,6 +14,17 @@ export const APPROVED_MCP_TOOLS = [
   'fad_put_endpoint',
   'fad_put_binding',
   'fad_discover_agents',
+  'fad_list_policies',
+  'fad_get_policy',
+  'fad_create_policy',
+  'fad_update_draft_policy',
+  'fad_activate_policy',
+  'fad_disable_policy',
+  'fad_evaluate_access',
+  'fad_get_enforcement_config',
+  'fad_preflight_enforcement',
+  'fad_set_enforcement_config',
+  'fad_get_enforcement_decision',
 ] as const;
 
 export type ApprovedMcpTool = (typeof APPROVED_MCP_TOOLS)[number];

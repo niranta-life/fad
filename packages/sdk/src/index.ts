@@ -284,6 +284,127 @@ export interface DiscoveryPage {
   meta: { request_id: string; api_version: 'v1'; limit: number; next_cursor: string | null };
 }
 
+export type PolicyStatus = 'draft' | 'active' | 'disabled';
+export type PolicyEffect = 'allow' | 'deny';
+export type AgentPolicyAction = 'agent.read' | 'agent.discover' | 'agent.invoke' | 'agent.update' | 'agent.suspend';
+export interface PolicyTagPredicate {
+  namespace: string;
+  key: string;
+  operator: 'eq';
+  value: string | number | boolean;
+}
+export interface PolicyDefinition {
+  name: string;
+  description?: string;
+  effect: PolicyEffect;
+  actions: AgentPolicyAction[];
+  subjects: { principal_ids: string[] };
+  resource: { type: 'agent'; agent_ids?: string[]; tags_all?: PolicyTagPredicate[] };
+  supersedes_policy_id?: string | null;
+}
+export interface Policy {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string;
+  effect: PolicyEffect;
+  actions: AgentPolicyAction[];
+  subjects: { principal_ids: string[] };
+  resource: { type: 'agent'; agent_ids?: string[]; tags_all?: PolicyTagPredicate[] };
+  status: PolicyStatus;
+  revision: number;
+  contains_restricted_tags: boolean;
+  supersedes_policy_id: string | null;
+  created_at: string;
+  updated_at: string;
+  activated_at: string | null;
+  disabled_at: string | null;
+  created_by: string;
+  updated_by: string;
+}
+export interface PolicyResult extends FadResponse<Policy> {
+  etag: string;
+  location?: string;
+}
+export interface PolicyPage {
+  data: Policy[];
+  page: { next_cursor: string | null };
+  meta: { request_id: string; api_version: 'v1' };
+}
+export interface PolicyListQuery {
+  status?: PolicyStatus;
+  limit?: number;
+  cursor?: string;
+}
+export interface Decision {
+  decision_id: string;
+  decision: 'allow' | 'deny';
+  reason_code: 'EXPLICIT_ALLOW' | 'EXPLICIT_DENY' | 'NO_MATCHING_ALLOW' | 'SUBJECT_INACTIVE' | 'RESOURCE_INACTIVE';
+  enforcement: 'not_enforced';
+  evaluated_at: string;
+  resource_revision: number;
+  policy_set_digest?: string;
+  input_digest?: string;
+  matched_policy_count?: number;
+  explanation?: Array<{ policy_id: string; revision: number; effect: PolicyEffect }>;
+}
+export interface EvaluateRequest {
+  subject: { principal_id: string };
+  action: AgentPolicyAction;
+  resource: { type: 'agent'; id: string };
+  context?: { purpose?: string; correlation_id?: string };
+}
+export type EnforcementMode = 'off' | 'shadow' | 'enforce';
+export type EnforceableAction = 'agent.read' | 'agent.discover' | 'agent.update' | 'agent.suspend';
+export interface EnforcementConfig {
+  organization_id: string;
+  mode: EnforcementMode;
+  actions: EnforceableAction[];
+  revision: number;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+export interface EnforcementPreflightInput {
+  mode: 'shadow' | 'enforce';
+  actions: EnforceableAction[];
+  reason: string;
+}
+export interface EnforcementPreflight {
+  preflight_id: string;
+  mode: 'shadow' | 'enforce';
+  actions: EnforceableAction[];
+  passes: boolean;
+  blockers: string[];
+  warnings: string[];
+  policy_snapshot_digest: string;
+  expires_at: string;
+}
+export interface SetEnforcementInput {
+  mode: EnforcementMode;
+  actions: EnforceableAction[];
+  reason: string;
+  preflight_id?: string;
+  acknowledge_default_deny: boolean;
+}
+export interface EnforcementMutationOptions extends CallOptions {
+  ifMatch: string;
+  idempotencyKey: string;
+}
+export interface EnforcementDecision {
+  id: string;
+  request_id: string;
+  agent_id: string;
+  actor_principal_id: string;
+  operation_id: string;
+  action: string;
+  channel: 'rest' | 'mcp' | (string & {});
+  mode: 'shadow' | 'enforce' | (string & {});
+  outcome: 'allowed' | 'denied' | 'would_allow' | 'would_deny' | (string & {});
+  reason_code: string;
+  policy_decision_id: string | null;
+  happened_at: string;
+}
+
 interface IdempotentOptions extends CallOptions {
   idempotencyKey: string;
 }
@@ -305,6 +426,41 @@ export class FadApiError extends Error {
     this.code = code;
     if (requestId !== undefined) this.requestId = requestId;
     if (retryAfterSeconds !== undefined) this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+export class PolicyDeniedError extends FadApiError {
+  constructor(status: number, code: string, message: string, requestId?: string, retryAfterSeconds?: number) {
+    super(status, code, message, requestId, retryAfterSeconds);
+    this.name = 'PolicyDeniedError';
+  }
+}
+
+export class PreconditionFailedError extends FadApiError {
+  constructor(status: number, code: string, message: string, requestId?: string, retryAfterSeconds?: number) {
+    super(status, code, message, requestId, retryAfterSeconds);
+    this.name = 'PreconditionFailedError';
+  }
+}
+
+export class PreconditionRequiredError extends FadApiError {
+  constructor(status: number, code: string, message: string, requestId?: string, retryAfterSeconds?: number) {
+    super(status, code, message, requestId, retryAfterSeconds);
+    this.name = 'PreconditionRequiredError';
+  }
+}
+
+export class ConflictError extends FadApiError {
+  constructor(status: number, code: string, message: string, requestId?: string, retryAfterSeconds?: number) {
+    super(status, code, message, requestId, retryAfterSeconds);
+    this.name = 'ConflictError';
+  }
+}
+
+export class ServiceUnavailableError extends FadApiError {
+  constructor(status: number, code: string, message: string, requestId?: string, retryAfterSeconds?: number) {
+    super(status, code, message, requestId, retryAfterSeconds);
+    this.name = 'ServiceUnavailableError';
   }
 }
 
@@ -432,7 +588,7 @@ export class FadClient {
     }
     this.maxRetryAfterMs = options.maxRetryAfterMs ?? DEFAULT_RETRY_AFTER_CAP_MS;
     const suffix = options.userAgentSuffix ? ` ${options.userAgentSuffix}` : '';
-    this.userAgent = `@fad/sdk/0.4.0${suffix}`;
+    this.userAgent = `@fad/sdk/0.5.0${suffix}`;
     this.now = options.now ?? Date.now;
     this.random = options.random ?? Math.random;
     this.sleep = options.sleep ?? delay;
@@ -525,6 +681,34 @@ export class FadClient {
     query: (body: DiscoveryQuery, options?: CallOptions): Promise<DiscoveryPage> => this.discoveryQuery(body, options),
     iterate: (body: DiscoveryQuery, options?: CallOptions): AsyncGenerator<DiscoveryMatch> =>
       this.iterateDiscovery(body, options),
+  };
+
+  readonly policies = {
+    list: (query: PolicyListQuery = {}, options?: CallOptions): Promise<PolicyPage> => this.policyList(query, options),
+    get: (policyId: string, options?: CallOptions): Promise<PolicyResult> => this.policyGet(policyId, options),
+    create: (body: PolicyDefinition, options: IdempotentOptions): Promise<PolicyResult> =>
+      this.policyWrite('/v1/policies', 'POST', body, options, false),
+    updateDraft: (policyId: string, body: PolicyDefinition, options: PreconditionOptions): Promise<PolicyResult> =>
+      this.policyWrite(`/v1/policies/${encodeURIComponent(policyId)}`, 'PUT', body, options, true),
+    activate: (policyId: string, options: PreconditionOptions): Promise<PolicyResult> =>
+      this.policyWrite(`/v1/policies/${encodeURIComponent(policyId)}/activate`, 'POST', undefined, options, true),
+    disable: (policyId: string, options: PreconditionOptions): Promise<PolicyResult> =>
+      this.policyWrite(`/v1/policies/${encodeURIComponent(policyId)}/disable`, 'POST', undefined, options, true),
+    iterate: (query: PolicyListQuery = {}, options?: CallOptions): AsyncGenerator<Policy> => this.iteratePolicies(query, options),
+  };
+
+  readonly authorization = {
+    evaluate: (body: EvaluateRequest, options?: CallOptions): Promise<FadResponse<Decision>> => this.evaluateAccess(body, options),
+  };
+
+  readonly enforcement = {
+    getConfig: (options?: CallOptions): Promise<FadResponse<EnforcementConfig> & { etag: string }> => this.enforcementGetConfig(options),
+    preflight: (body: EnforcementPreflightInput, options?: CallOptions): Promise<FadResponse<EnforcementPreflight>> =>
+      this.enforcementPreflight(body, options),
+    setConfig: (body: SetEnforcementInput, options: EnforcementMutationOptions): Promise<FadResponse<EnforcementConfig> & { etag: string }> =>
+      this.enforcementSetConfig(body, options),
+    getDecision: (decisionId: string, options?: CallOptions): Promise<FadResponse<EnforcementDecision>> =>
+      this.enforcementGetDecision(decisionId, options),
   };
 
   private async healthCall<T extends { status: string }>(
@@ -629,12 +813,13 @@ export class FadClient {
     extraHeaders: Record<string, string>,
     signal: AbortSignal | undefined,
     key: string,
+    allowRetry = true,
   ): Promise<Response> {
     const started = this.now();
     const timeout = AbortSignal.timeout(this.timeoutMs);
     const combined = AbortSignal.any(signal ? [timeout, signal] : [timeout]);
     const url = new URL(path, this.baseUrl);
-    const payload = JSON.stringify(body);
+    const payload = body === undefined ? undefined : JSON.stringify(body);
     let attempt = 0;
     while (true) {
       if (combined.aborted) {
@@ -642,9 +827,9 @@ export class FadClient {
       }
       const headers = new Headers({
         accept: 'application/json',
-        'content-type': 'application/json',
         'user-agent': this.userAgent,
       });
+      if (payload !== undefined) headers.set('content-type', 'application/json');
       headers.set('X-FAD-API-Key', key);
       for (const [name, value] of Object.entries(extraHeaders)) headers.set(name, value);
       let response: Response;
@@ -658,7 +843,7 @@ export class FadClient {
           throw redirect;
         }
         const remaining = this.timeoutMs - (this.now() - started);
-        if (attempt < this.maxGetRetries && remaining > 0) {
+        if (allowRetry && attempt < this.maxGetRetries && remaining > 0) {
           const wait = retryWaitMs({
             attempt: attempt + 1,
             retryAfterHeader: null,
@@ -676,7 +861,7 @@ export class FadClient {
         wrapped.name = 'FadNetworkError';
         throw wrapped;
       }
-      const retryable = response.status === 429 || response.status === 503;
+      const retryable = allowRetry && (response.status === 429 || response.status === 503);
       const remaining = this.timeoutMs - (this.now() - started);
       if (retryable && attempt < this.maxGetRetries && remaining > 0) {
         const wait = retryWaitMs({
@@ -1138,6 +1323,115 @@ export class FadClient {
       cursor = next;
     }
   }
+
+  private async policyList(query: PolicyListQuery, options?: CallOptions): Promise<PolicyPage> {
+    const params = new URLSearchParams();
+    if (query.status) params.set('status', query.status);
+    if (query.limit !== undefined) params.set('limit', String(query.limit));
+    if (query.cursor) params.set('cursor', query.cursor);
+    const suffix = params.size > 0 ? `?${params.toString()}` : '';
+    const key = await this.resolveKey();
+    const response = await this.send(`/v1/policies${suffix}`, true, options?.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isPolicyPage(parsed)) return parsed;
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async policyGet(policyId: string, options?: CallOptions): Promise<PolicyResult> {
+    const key = await this.resolveKey();
+    const response = await this.send(`/v1/policies/${encodeURIComponent(policyId)}`, true, options?.signal, key);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isPolicyResponse(parsed)) return withPolicyEtag(response, parsed);
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async policyWrite(
+    path: string,
+    method: 'POST' | 'PUT',
+    body: unknown,
+    options: IdempotentOptions | PreconditionOptions,
+    precondition: boolean,
+  ): Promise<PolicyResult> {
+    if (typeof options.idempotencyKey !== 'string' || options.idempotencyKey.length === 0) {
+      throw new Error('idempotencyKey is required');
+    }
+    const headers: Record<string, string> = { 'Idempotency-Key': options.idempotencyKey };
+    if (precondition) {
+      const tag = (options as PreconditionOptions).ifMatch;
+      if (typeof tag !== 'string' || tag.length === 0) throw new Error('ifMatch is required');
+      headers['If-Match'] = tag;
+    }
+    const key = await this.resolveKey();
+    const response = await this.sendJson(path, method, body, headers, options.signal, key);
+    const parsed = await readJson(response, key);
+    if ((response.status === 200 || response.status === 201) && isPolicyResponse(parsed)) {
+      const result = withPolicyEtag(response, parsed);
+      const location = response.headers.get('location');
+      return location ? { ...result, location } : result;
+    }
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async *iteratePolicies(query: PolicyListQuery, options?: CallOptions): AsyncGenerator<Policy> {
+    let cursor = query.cursor;
+    for (;;) {
+      const page = await this.policyList({ ...query, cursor }, options);
+      for (const item of page.data) yield item;
+      const next = page.page.next_cursor;
+      if (next === null || next === cursor) return;
+      cursor = next;
+    }
+  }
+
+  private async evaluateAccess(body: EvaluateRequest, options?: CallOptions): Promise<FadResponse<Decision>> {
+    const key = await this.resolveKey();
+    const response = await this.sendJson('/v1/authorization/evaluate', 'POST', body, {}, options?.signal, key, false);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isDecisionResponse(parsed)) return parsed;
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async enforcementGetConfig(options?: CallOptions): Promise<FadResponse<EnforcementConfig> & { etag: string }> {
+    const key = await this.resolveKey();
+    const response = await this.send('/v1/enforcement/config', true, options?.signal, key);
+    const body = await readJson(response, key);
+    if (response.status === 200 && isEnforcementConfigResponse(body)) return withResourceEtag(response, body);
+    throw errorFrom(response, body, key);
+  }
+
+  private async enforcementPreflight(body: EnforcementPreflightInput, options?: CallOptions): Promise<FadResponse<EnforcementPreflight>> {
+    const key = await this.resolveKey();
+    const response = await this.sendJson('/v1/enforcement/preflight', 'POST', body, {}, options?.signal, key, false);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isEnforcementPreflightResponse(parsed)) return parsed;
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async enforcementSetConfig(
+    body: SetEnforcementInput,
+    options: EnforcementMutationOptions,
+  ): Promise<FadResponse<EnforcementConfig> & { etag: string }> {
+    if (typeof options.idempotencyKey !== 'string' || options.idempotencyKey.length === 0) {
+      throw new Error('idempotencyKey is required');
+    }
+    if (typeof options.ifMatch !== 'string' || options.ifMatch.length === 0) throw new Error('ifMatch is required');
+    const key = await this.resolveKey();
+    const response = await this.sendJson('/v1/enforcement/config', 'PUT', body, {
+      'Idempotency-Key': options.idempotencyKey,
+      'If-Match': options.ifMatch,
+    }, options.signal, key, false);
+    const parsed = await readJson(response, key);
+    if (response.status === 200 && isEnforcementConfigResponse(parsed)) return withResourceEtag(response, parsed);
+    throw errorFrom(response, parsed, key);
+  }
+
+  private async enforcementGetDecision(decisionId: string, options?: CallOptions): Promise<FadResponse<EnforcementDecision>> {
+    const key = await this.resolveKey();
+    const response = await this.send(`/v1/enforcement/decisions/${encodeURIComponent(decisionId)}`, true, options?.signal, key);
+    const body = await readJson(response, key);
+    if (response.status === 200 && isEnforcementDecisionResponse(body)) return body;
+    throw errorFrom(response, body, key);
+  }
 }
 
 function conditionalHeaders(options: ConditionalWriteOptions): Record<string, string> {
@@ -1184,7 +1478,15 @@ function errorFrom(response: Response, body: unknown, secret: string): FadApiErr
   const message = isRecord(body) && isRecord(body.error) && typeof body.error.message === 'string'
     ? scrub(body.error.message, secret)
     : 'Request failed';
-  return new FadApiError(response.status, code, message, requestId, retryHeader(response));
+  const retryAfter = retryHeader(response);
+  if (response.status === 403 && code === 'POLICY_DENIED') {
+    return new PolicyDeniedError(response.status, code, message, requestId, retryAfter);
+  }
+  if (response.status === 412) return new PreconditionFailedError(response.status, code, message, requestId, retryAfter);
+  if (response.status === 428) return new PreconditionRequiredError(response.status, code, message, requestId, retryAfter);
+  if (response.status === 409) return new ConflictError(response.status, code, message, requestId, retryAfter);
+  if (response.status === 503) return new ServiceUnavailableError(response.status, code, message, requestId, retryAfter);
+  return new FadApiError(response.status, code, message, requestId, retryAfter);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1398,4 +1700,99 @@ function isDiscoveryMatch(value: unknown): value is DiscoveryMatch {
 
 function isDiscoveryPage(value: unknown): value is DiscoveryPage {
   return isRecord(value) && Array.isArray(value.data) && value.data.every(isDiscoveryMatch) && isPageMeta(value.meta);
+}
+
+function isPolicy(value: unknown): value is Policy {
+  if (!isRecord(value) || !isRecord(value.subjects) || !isRecord(value.resource)) return false;
+  return typeof value.id === 'string'
+    && typeof value.organization_id === 'string'
+    && typeof value.name === 'string'
+    && typeof value.description === 'string'
+    && (value.effect === 'allow' || value.effect === 'deny')
+    && Array.isArray(value.actions)
+    && Array.isArray(value.subjects.principal_ids)
+    && value.resource.type === 'agent'
+    && (value.status === 'draft' || value.status === 'active' || value.status === 'disabled')
+    && typeof value.revision === 'number'
+    && typeof value.contains_restricted_tags === 'boolean'
+    && (typeof value.supersedes_policy_id === 'string' || value.supersedes_policy_id === null)
+    && typeof value.created_at === 'string'
+    && typeof value.updated_at === 'string';
+}
+
+function isPolicyResponse(value: unknown): value is FadResponse<Policy> {
+  return isRecord(value) && isPolicy(value.data) && isMeta(value.meta);
+}
+
+function isPolicyPage(value: unknown): value is PolicyPage {
+  if (!isRecord(value) || !Array.isArray(value.data) || !value.data.every(isPolicy) || !isRecord(value.page) || !isMeta(value.meta)) {
+    return false;
+  }
+  const next = value.page.next_cursor;
+  return typeof next === 'string' || next === null;
+}
+
+function withPolicyEtag(response: Response, body: FadResponse<Policy>): PolicyResult {
+  const etag = response.headers.get('etag') ?? '';
+  if (!/^"policy-v[1-9][0-9]*"$/.test(etag)) {
+    throw new FadApiError(response.status, 'INVALID_RESPONSE', 'Response did not include a strong ETag', headerRequestId(response));
+  }
+  return { ...body, etag };
+}
+
+function isDecisionResponse(value: unknown): value is FadResponse<Decision> {
+  if (!isRecord(value) || !isRecord(value.data) || !isMeta(value.meta)) return false;
+  const data = value.data;
+  return typeof data.decision_id === 'string'
+    && (data.decision === 'allow' || data.decision === 'deny')
+    && typeof data.reason_code === 'string'
+    && data.enforcement === 'not_enforced'
+    && typeof data.evaluated_at === 'string'
+    && typeof data.resource_revision === 'number';
+}
+
+function isEnforcementConfig(value: unknown): value is EnforcementConfig {
+  if (!isRecord(value) || !Array.isArray(value.actions)) return false;
+  return typeof value.organization_id === 'string'
+    && (value.mode === 'off' || value.mode === 'shadow' || value.mode === 'enforce')
+    && value.actions.every((item) => typeof item === 'string')
+    && typeof value.revision === 'number'
+    && (value.updated_by === null || typeof value.updated_by === 'string')
+    && (value.updated_at === null || typeof value.updated_at === 'string');
+}
+
+function isEnforcementConfigResponse(value: unknown): value is FadResponse<EnforcementConfig> {
+  return isRecord(value) && isEnforcementConfig(value.data) && isMeta(value.meta);
+}
+
+function isEnforcementPreflightResponse(value: unknown): value is FadResponse<EnforcementPreflight> {
+  if (!isRecord(value) || !isRecord(value.data) || !isMeta(value.meta) || !Array.isArray(value.data.actions)) return false;
+  const data = value.data;
+  const actions = data.actions;
+  return typeof data.preflight_id === 'string'
+    && (data.mode === 'shadow' || data.mode === 'enforce')
+    && Array.isArray(actions)
+    && actions.every((item) => typeof item === 'string')
+    && typeof data.passes === 'boolean'
+    && Array.isArray(data.blockers)
+    && Array.isArray(data.warnings)
+    && typeof data.policy_snapshot_digest === 'string'
+    && typeof data.expires_at === 'string';
+}
+
+function isEnforcementDecisionResponse(value: unknown): value is FadResponse<EnforcementDecision> {
+  if (!isRecord(value) || !isRecord(value.data) || !isMeta(value.meta)) return false;
+  const data = value.data;
+  return typeof data.id === 'string'
+    && typeof data.request_id === 'string'
+    && typeof data.agent_id === 'string'
+    && typeof data.actor_principal_id === 'string'
+    && typeof data.operation_id === 'string'
+    && typeof data.action === 'string'
+    && typeof data.channel === 'string'
+    && typeof data.mode === 'string'
+    && typeof data.outcome === 'string'
+    && typeof data.reason_code === 'string'
+    && (data.policy_decision_id === null || typeof data.policy_decision_id === 'string')
+    && typeof data.happened_at === 'string';
 }

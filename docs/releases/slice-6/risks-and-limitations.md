@@ -1,0 +1,25 @@
+# Risks and limitations
+
+- The matrix counts are PASS 134, PARTIAL 0, NOT RUN 0. R19 is the successful Actions `pull_request` run whose headSha equals `git --no-replace-objects rev-parse HEAD`. This blob does not store the run id or the commit id. The image rerun on `sha256:f3a44c87cf53cc184600db7dc07a0e348a6256740ff3839bc7d98f838082e3fc` covered two replicas, OFF, SHADOW, ENFORCE, audited OFF, old-image admission, database pause, P10, P25, and T14 at 2026-10-22T06:26:47.550Z. The production TLS boot on that image passed at 2026-10-22T06:27:50Z. `kubectl apply` is not the Docker gate and is not a pass. See `completion.md` and `test-results/matrix.md`.
+- This commit has no `.github` workflow. The workflow that runs R19 is on the default branch. `npm test` is not that run.
+- The 100-read sample measured p50 9.4 ms, p95 11.4 ms, p99 15.5 ms, and max 20.7 ms. Enforcement decisions grew by 100. Policy decisions grew by 100. Audit events grew by 0. The sample is one process and one agent.
+- `kubectl apply` is not the Docker gate. R12 covers the image. At 2026-10-22T05:39:36Z the client had no context and `localhost:8080` refused the connection. `kind`, `minikube`, `k3d`, and `k3s` are absent. No object was created. See `deployment-evidence/kubectl.md`.
+- `fad-s0-pg` has no TLS. The image exits when production mode points at it. The passing boot used a separate Postgres with TLS, `hostnossl reject`, and a CA trusted by `NODE_EXTRA_CA_CERTS`. The installed `pg` client treats `sslmode=require` as `verify-full`. A self-signed server exited 1 at 2026-10-22T05:30:48.720Z.
+- The tested local image id is `sha256:f3a44c87cf53cc184600db7dc07a0e348a6256740ff3839bc7d98f838082e3fc`. It contains the row-lock order, the shutdown cancel, and the fence-timeout fail-closed change. It was not pushed to a registry. The previous id `sha256:e5861d49221dc9d4598c67e521f70720f3f6a50aba4ab388fe965eff907e2473` does not contain the fence-timeout fail-closed change. The earlier id `sha256:38d932df2039c17ed7a07b94e89e6f9de667416d9102ad4b792b845ca1c4f150` does not contain the row lock or the shutdown cancel.
+- The down script was not applied. Software rollback keeps the tables. An old image cannot read a tenant that is still ENFORCE.
+- There is no instantaneous revocation of an agent that is already outside this directory.
+- A flag-off process, or an image that does not set `fad.pep_generation=6`, cannot see `agents` rows for a tenant whose mode is `enforce`. A tenant that has never been ENFORCE is unchanged. Database loss does not rewrite `enforce` to `off`.
+- Activating a suspended agent while `agent.update` is enforced returns 403 `POLICY_DENIED`. The matcher treats a non-active agent as inactive before an allow matches. Operators recover in OFF or SHADOW, or by omitting `agent.update`.
+- A disabled principal receives 401 before the enforcement point. The HTTP proof did not record a `SUBJECT_INACTIVE` decision for that call.
+- Principal Race Both is on an active allow and an active deny for `agent.read`. GET request `f0fdd388-429d-4380-960e-a9f650ae38f6` is 404 `AGENT_NOT_FOUND` with decision `EXPLICIT_DENY`. D17 covers that intersection on an update replay.
+- C06 passed. A list cursor sent with a different status filter is 400 `VALIDATION_ERROR`. C08 covers a revision change. C04, C05, and C07 passed on a real limit-1 cursor in the gate rerun.
+- The deployed MCP catalog is 21 tools. The package file's unpublished 12 tools were not added. `tools/list` was 25 with both flags and full scopes.
+- The published operation id `searchAgentsByTag` was not renamed. The map name is `searchAgentsByTags`.
+- The compose overlay defaults the code flag to false. The package overlay that hardcodes true was not copied.
+- The audit reason is `sha256(JSON.stringify(reason))`. The reason text is not stored.
+- Fastify `requestTimeout` is the configured timeout plus one second so a client-side query timeout can become 503.
+- `POST /v1/authorization/evaluate` and the MCP evaluate tool stay `not_enforced`. Repeatable-read evaluation sets `fad.pep_generation` when the flag is true so ENFORCE row security does not hide agents from that read-only simulation.
+- `agent.invoke` is not enforced and no invoke route was added.
+- Multi-replica admission beyond the local two-replica test is an operator procedure. Preflight fails when `FAD_ENFORCEMENT_OLD_PODS=true`. That hook was not used in the image proof. The database generation gate was used.
+- Hash collisions on the advisory key reduce concurrency. They do not authorize another tenant.
+- The tags compatibility test omits `20261021_006_policy_enforcement.up.sql` from the artificial pre-tags directory. The trigger in that migration requires `agent_tag_assignments`. The full directory still applies the tags migration and then this migration.

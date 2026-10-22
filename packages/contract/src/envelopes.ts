@@ -26,6 +26,9 @@ export const ERRORS = {
   ENDPOINT_NOT_FOUND: 'Endpoint not found.',
   BINDING_NOT_FOUND: 'Binding not found.',
   INVALID_CURSOR: 'Cursor is invalid.',
+  CONFLICT: 'The request conflicts with the current state.',
+  POLICY_DENIED: 'The request is denied by organization policy.',
+  ENFORCEMENT_SCAN_BUDGET_EXCEEDED: 'The directory could not build a complete page.',
 } as const;
 
 export type ErrorCode = keyof typeof ERRORS;

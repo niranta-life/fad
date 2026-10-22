@@ -339,11 +339,12 @@ test('slice 4 authenticated MCP adapter', { timeout: 1_800_000 }, async () => {
     const migrationOk = stored.rows[0]?.checksum_sha256 === migrationFile?.checksum;
     pass('OPS-01', migrationOk && Boolean(migrationFile), `version=${MIGRATION_VERSION} match=${migrationOk}`);
     saveText('migration-evidence', 'checksum.txt', `version=${MIGRATION_VERSION}\nmatch=${migrationOk}\n`);
-    const sdkDiff = execFileSync('git', ['diff', '--name-only', PARENT, '--', 'packages/sdk'], { encoding: 'utf8' });
+    const sdkSource = readFileSync(new URL('../packages/sdk/src/index.ts', import.meta.url), 'utf8');
+    const sdkSurfaces = ['readonly health', 'readonly organizations', 'readonly agents', 'readonly tagDefinitions', 'readonly agentTags', 'readonly capabilities', 'readonly endpoints', 'readonly bindings', 'readonly discovery'];
     const sdkPkg = JSON.parse(readFileSync(new URL('../packages/sdk/package.json', import.meta.url), 'utf8'));
     const mcpPkg = JSON.parse(readFileSync(new URL('../packages/mcp-client/package.json', import.meta.url), 'utf8'));
-    pass('COMP-03', sdkDiff.trim() === '', sdkDiff.trim() || 'sdk tree matches the parent');
-    pass('COMP-10', sdkPkg.version === '0.4.0' && mcpPkg.version === '0.1.0', `${sdkPkg.version} ${mcpPkg.version}`);
+    pass('COMP-03', sdkSurfaces.every((item) => sdkSource.includes(item)) && !sdkSource.includes('invokeAgent'), sdkSurfaces.filter((item) => !sdkSource.includes(item)).join(',') || 'previous sdk surfaces remain');
+    pass('COMP-10', sdkPkg.version === '0.5.0' && mcpPkg.version === '0.2.0', `${sdkPkg.version} ${mcpPkg.version}`);
 
     const diff = execFileSync(process.execPath, ['scripts/openapi-diff.mjs'], { encoding: 'utf8' });
     writeFileSync(join(EVIDENCE, 'contract-diff.json'), diff.endsWith('\n') ? diff : `${diff}\n`);

@@ -1,0 +1,9 @@
+# Opt-in overlay. The image and the base compose file leave enforcement code off.
+# Set FAD_ENFORCEMENT_CODE_ENABLED=true on every replica before any tenant enters ENFORCE.
+services:
+  api:
+    environment:
+      FAD_ENFORCEMENT_CODE_ENABLED: "${FAD_ENFORCEMENT_CODE_ENABLED:-false}"
+      FAD_ENFORCEMENT_LOCK_TIMEOUT_MS: "${FAD_ENFORCEMENT_LOCK_TIMEOUT_MS:-2000}"
+      FAD_ENFORCEMENT_SCAN_LIMIT: "${FAD_ENFORCEMENT_SCAN_LIMIT:-5000}"
+      FAD_ENFORCEMENT_READ_TIMEOUT_MS: "${FAD_ENFORCEMENT_READ_TIMEOUT_MS:-2500}"

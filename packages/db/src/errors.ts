@@ -1,4 +1,7 @@
 const SQLSTATE = new Set([
+  '40P01',
+  '55P03',
+  '57014',
   '57P01',
   '57P02',
   '57P03',
@@ -40,7 +43,7 @@ function codeOf(err: unknown): string | undefined {
 export function isDependencyError(err: unknown): boolean {
   const code = codeOf(err);
   if (code && (SQLSTATE.has(code) || NODE_CODES.has(code))) return true;
-  if (/connection terminated|timeout exceeded|the database system is (starting up|shutting down)|cannot connect|Connection refused|ECONNREFUSED/i.test(textOf(err))) {
+  if (/connection terminated|timeout exceeded|query read timeout|the database system is (starting up|shutting down)|cannot connect|Connection refused|ECONNREFUSED/i.test(textOf(err))) {
     return true;
   }
   if (typeof err === 'object' && err !== null && 'errors' in err && Array.isArray((err as { errors?: unknown }).errors)) {

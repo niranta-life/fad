@@ -1,0 +1,109 @@
+2026-10-22T05:34:51Z START image=sha256:e5861d49221dc9d4598c67e521f70720f3f6a50aba4ab388fe965eff907e2473
+38e20f4c8c1d4833dfea97d2c7c211850a8f06641172bd5aac1caa3b8aebf9c3
+2026-10-22T05:34:51Z POSTGRES_START
+a1af522c6a5032cc7beff6347ead1e0bc7b1533cc307b1d6daef74607e8501ef
+/var/run/postgresql:5432 - no response
+/var/run/postgresql:5432 - accepting connections
+2026-10-22T05:34:52Z POSTGRES_SSL_SHOW
+on
+2026-10-22T05:34:52Z HBA_HOSTSSL
+t
+2026-10-22T05:34:53Z CLEARTEXT_TCP_EXPECT_REJECT
+psql: error: connection to server at "fad-s6-pg-tls" (172.29.0.2), port 5432 failed: FATAL:  pg_hba.conf rejects connection for host "172.29.0.3", user "postgres", database "fad", no encryption
+2026-10-22T05:34:53Z CLEARTEXT_REJECTED
+2026-10-22T05:34:53Z TLS_TCP_EXPECT_OK
+on
+2026-10-22T05:34:53Z MIGRATE
+{"ok":true,"action":"bootstrap","applied":["0001_foundation","0002_rate_limit","20261020_001_agents","20261020_002_principal_lock","20261021_001_typed_tags","20261021_005_policy_evaluation","20261021_006_policy_enforcement","20261022_001_capabilities_discovery","20261023_001_mcp_identity_bindings"],"skipped":[]}
+2026-10-22T05:34:53Z MIGRATE_EXIT=0
+2026-10-22T05:34:53Z API_START
+c5baff4ba6eeb3855e9ddddced6b32d8586007890a96ec2ee41b61e6e4c1551d
+fad-s6-prod-tls
+2026-10-22T05:34:55Z LIVE_HEAD=HTTP/1.1 200 OK
+2026-10-22T05:34:55Z LIVE_BODY={"status":"ok"}
+2026-10-22T05:34:55Z READY_HEAD=HTTP/1.1 200 OK
+2026-10-22T05:34:55Z READY_BODY={"status":"ready"}
+2026-10-22T05:34:55Z PG_STAT_SSL
+ application_name | ssl | version |         cipher         
+------------------+-----+---------+------------------------
+ fad-api-1        | t   | TLSv1.3 | TLS_AES_256_GCM_SHA384
+(1 row)
+
+2026-10-22T05:34:55Z API_STATE=running 0
+2026-10-22T05:34:55Z SSL_TRUE_ROWS=1
+2026-10-22T05:34:55Z RESULT=PASS
+status=running exit=0 oom=false started=2026-10-22T05:34:53.876312115Z finished=0001-01-01T00:00:00Z
+----- api logs -----
+(node:1) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+
+To prepare for this change:
+- If you want the current behavior, explicitly use 'sslmode=verify-full'
+- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+
+See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+(Use `node --trace-warnings ...` to show where the warning was created)
+{"level":30,"time":1792647294122,"pid":1,"hostname":"c5baff4ba6ee","msg":"Server listening at http://127.0.0.1:8080"}
+{"level":30,"time":1792647294122,"pid":1,"hostname":"c5baff4ba6ee","msg":"Server listening at http://172.29.0.3:8080"}
+{"level":30,"time":1792647294122,"pid":1,"hostname":"c5baff4ba6ee","port":8080,"bind":"0.0.0.0","msg":"listening"}
+{"level":30,"time":1792647295186,"pid":1,"hostname":"c5baff4ba6ee","reqId":"8c3cd4b7-78f9-4afe-bf9f-cb0ce142fa7c","request_id":"8c3cd4b7-78f9-4afe-bf9f-cb0ce142fa7c","status":200,"method":"GET","path":"/health/live","msg":"request"}
+{"level":30,"time":1792647295198,"pid":1,"hostname":"c5baff4ba6ee","reqId":"7f2f8376-452b-4bd9-9341-07164f5fabec","request_id":"7f2f8376-452b-4bd9-9341-07164f5fabec","status":200,"method":"GET","path":"/health/ready","msg":"request"}
+----- postgres logs -----
+The files belonging to this database system will be owned by user "postgres".
+This user must also own the server process.
+
+The database cluster will be initialized with locale "en_US.utf8".
+The default database encoding has accordingly been set to "UTF8".
+The default text search configuration will be set to "english".
+
+Data page checksums are disabled.
+
+fixing permissions on existing directory /var/lib/postgresql/data ... ok
+creating subdirectories ... ok
+selecting dynamic shared memory implementation ... posix
+selecting default max_connections ... 100
+selecting default shared_buffers ... 128MB
+selecting default time zone ... Etc/UTC
+creating configuration files ... ok
+running bootstrap script ... ok
+performing post-bootstrap initialization ... ok
+syncing data to disk ... ok
+
+
+Success. You can now start the database server using:
+
+    pg_ctl -D /var/lib/postgresql/data -l logfile start
+
+initdb: warning: enabling "trust" authentication for local connections
+initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+waiting for server to start....2026-10-22 05:34:52.202 UTC [61] LOG:  starting PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2026-10-22 05:34:52.202 UTC [61] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-10-22 05:34:52.204 UTC [64] LOG:  database system was shut down at 2026-10-22 05:34:52 UTC
+2026-10-22 05:34:52.206 UTC [61] LOG:  database system is ready to accept connections
+ done
+server started
+CREATE DATABASE
+
+
+/usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+
+waiting for server to shut down....2026-10-22 05:34:52.354 UTC [61] LOG:  received fast shutdown request
+2026-10-22 05:34:52.356 UTC [61] LOG:  aborting any active transactions
+2026-10-22 05:34:52.357 UTC [61] LOG:  background worker "logical replication launcher" (PID 67) exited with exit code 1
+2026-10-22 05:34:52.357 UTC [62] LOG:  shutting down
+2026-10-22 05:34:52.357 UTC [62] LOG:  checkpoint starting: shutdown immediate
+2026-10-22 05:34:52.385 UTC [62] LOG:  checkpoint complete: wrote 926 buffers (5.7%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.005 s, sync=0.023 s, total=0.029 s; sync files=301, longest=0.018 s, average=0.001 s; distance=4273 kB, estimate=4273 kB; lsn=0/191F098, redo lsn=0/191F098
+2026-10-22 05:34:52.387 UTC [61] LOG:  database system is shut down
+ done
+server stopped
+
+PostgreSQL init process complete; ready for start up.
+
+2026-10-22 05:34:52.468 UTC [1] LOG:  starting PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2026-10-22 05:34:52.468 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-10-22 05:34:52.468 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2026-10-22 05:34:52.469 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-10-22 05:34:52.470 UTC [77] LOG:  database system was shut down at 2026-10-22 05:34:52 UTC
+2026-10-22 05:34:52.476 UTC [1] LOG:  database system is ready to accept connections
+2026-10-22 05:34:53.035 UTC [1] LOG:  received SIGHUP, reloading configuration files
+2026-10-22 05:34:53.187 UTC [108] FATAL:  pg_hba.conf rejects connection for host "172.29.0.3", user "postgres", database "fad", no encryption

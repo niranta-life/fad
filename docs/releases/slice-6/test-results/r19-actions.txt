@@ -1,0 +1,31 @@
+# Actions run 39735925781
+
+Command: `gh run view 39735925781 --json conclusion,status,headSha,event,url,createdAt,updatedAt,jobs`
+
+Exit: 0
+
+conclusion: success
+
+status: completed
+
+event: pull_request
+
+headBranch: slice-6
+
+headSha: 7cbface1a1746b2f74b06bdf8c7937dce8c4c859
+
+createdAt: 2026-10-22T06:45:12Z
+
+updatedAt: 2026-10-22T06:46:36Z
+
+url: https://github.com/niranta-life/fad/actions/runs/39735925781
+
+Job slice6 id 119681456768 started 2026-10-22T06:45:15Z and completed 2026-10-22T06:46:35Z. Every step succeeded, including checkout, the fence check, `npm ci`, `npm run build`, migrator bootstrap, and the database and client tests.
+
+The job printed `HEAD=7cbface1a1746b2f74b06bdf8c7937dce8c4c859`. Bootstrap applied `20261021_006_policy_enforcement`. The test command was `node --test --test-concurrency=1 tests/unit.test.mjs tests/slice6-contract.test.mjs tests/db.test.mjs tests/agents.test.mjs tests/sdk.test.mjs tests/slice5.test.mjs tests/slice6-clients.test.mjs`. The runner reported tests 8, pass 8, fail 0, duration_ms 27182.16239. `PASS SDK` was at 2026-10-22T06:46:29.094Z. `PASS MCP-ENFORCE` was at 2026-10-22T06:46:31.734Z.
+
+The fence step printed both timeout comments from `packages/db/src/enforcement.ts` and the `admin.enforcement.getDecision` call. It did not find `markSkip` or `s6_skip_pep`.
+
+This run did not execute the Docker replica file or the local race file. Those results stay in their existing logs. `npm test` on the workstation is not this run. The log excerpt above omits the runner environment values.
+
+This file records an earlier checkout. It is not R19. R19 is the successful Actions `pull_request` run whose headSha equals `git --no-replace-objects rev-parse HEAD`. This file does not store that run id.

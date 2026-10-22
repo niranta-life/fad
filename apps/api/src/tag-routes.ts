@@ -4,6 +4,8 @@ import { API_VERSION, successEnvelope, type ErrorCode } from '@fad/contract';
 import {
   AgentServiceError,
   IdempotencyConflictError,
+  CommittedDenial,
+  EnforcementServiceError,
   TagServiceError,
   createTagDefinition,
   deleteAgentTag,
@@ -238,6 +240,9 @@ async function authorize(
 }
 
 function fail(deps: RouteDeps, reply: FastifyReply, requestId: string, error: unknown): FastifyReply | undefined {
+  if (error instanceof CommittedDenial || error instanceof EnforcementServiceError) {
+    return deps.sendError(reply, requestId, error.statusCode, error.code);
+  }
   if (error instanceof TagServiceError || error instanceof AgentServiceError) {
     return deps.sendError(reply, requestId, error.status, error.code);
   }
